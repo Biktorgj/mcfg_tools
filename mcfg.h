@@ -44,8 +44,15 @@ struct mcfg_item {
     struct mcfg_config_item item;
 } __attribute__((packed));
 
+// Base item IDs
 enum {
     MCFG_CARRIER_NAME = 0x00000019,
+};
+
+// Config Item IDs
+enum {
+    MCFG_EFS_FILE = 0x0002,
+    MCFG_FOOTER = 0x00A1,
 };
 
 #endif
