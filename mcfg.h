@@ -12,6 +12,7 @@
 
 #define MCFG_FILE_HEADER_MAGIC "MCFG"
 #define ELF_OFFSET 8192
+#define VERSION_DATA 4995
 
 struct mcfg_file_header {
     unsigned char magic[4]; //MCFG
@@ -39,5 +40,12 @@ struct mcfg_item {
     uint16_t payload_size; // Size of the rest of the item
     uint8_t *payload[0];
 } __attribute__((packed));
+
+struct mcfg_config_item {
+    uint16_t item_id; // EFS NV element?
+    uint16_t payload_size; // Size of the rest of the item
+    uint8_t *payload[0];
+} __attribute__((packed));
+
 
 #endif

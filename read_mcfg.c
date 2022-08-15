@@ -11,38 +11,49 @@ uint8_t *file_buff;
 size_t sz;
 
 void showHelp() {
-  fprintf(stdout, "Qualcomm MCFG binary file reader \n");
   fprintf(stdout, "Usage:\n");
   fprintf(stdout, "  read_mcfg -i INPUT_FILE \n");
   fprintf(stdout, "Arguments: \n"
                   "\t-i: Input file to read\n");
 }
 
-void parse_data() {
-  fprintf(stdout, "PARSE\n");
+int check_file_header() {
   struct mcfg_file_header *mcfg_head;
   mcfg_head = (struct mcfg_file_header *)(file_buff + ELF_OFFSET);
-  if (memcmp(mcfg_head->magic, MCFG_FILE_HEADER_MAGIC, 4) != 0) {
-    fprintf(stderr, "ERROR: Header doesn't match\n");
-    return;
-  } else {
+  struct mcfg_config_item *tptr;
+  if (memcmp(mcfg_head->magic, MCFG_FILE_HEADER_MAGIC, 4) == 0) {
     fprintf(stdout,
-            "Header match:\n"
-            "\tMagic: %s \n"
-            "\tFormat: %i \n"
-            "\tConfig type: %s\n"
-            "\tNumber of elements: %i\n",
+            "Header is OK:\n"
+            "\t- Magic: %s \n"
+            "\t- Format: %i \n"
+            "\t- Config type: %s\n"
+            "\t- Number of elements in file: %i\n",
             mcfg_head->magic, mcfg_head->format_version,
             mcfg_head->config_type < 1 ? "HW" : "SW", mcfg_head->no_of_items);
-  }
+    
+    // First element is some kind of subheader with the carrier name?
+    tptr = (struct mcfg_config_item*) (file_buff + ELF_OFFSET + sizeof(struct mcfg_file_header));
 
+    for (int i = 0; i < mcfg_head->no_of_items; i++) {
+        fprintf(stdout, "Trying to read item %i...\n", i);
+        switch (tptr->item_id) {
+            case VERSION_DATA:
+                fprintf(stdout, "Version data, size %i\n", tptr->payload_size);
+                break;
+        }
+    }
+  } else {
+    fprintf(stderr, "ERROR: Header doesn't match\n");
+    return -EINVAL;
+  }
+  return 0;
 }
 
 int main(int argc, char *argv[]) {
   char *input_file;
   int c;
   FILE *fp;
-  fprintf(stdout, "%s: Oh hai!\n", __func__);
+  fprintf(stdout, "Qualcomm MCFG binary file reader \n");
   if (argc < 2) {
     showHelp();
     return 0;
@@ -63,7 +74,6 @@ int main(int argc, char *argv[]) {
       return 0;
     }
 
-  fprintf(stdout, "\tInput file: %s\n", input_file);
   fp = fopen(input_file, "rb");
   if (fp == NULL) {
     fprintf(stderr, "Error opening input file %s\n", input_file);
@@ -72,12 +82,14 @@ int main(int argc, char *argv[]) {
   fseek(fp, 0L, SEEK_END);
   sz = ftell(fp);
   file_buff = malloc(sz);
-  fprintf(stdout, "Allocated size: %ld bytes\n", sz);
   fseek(fp, 0L, SEEK_SET);
   fread(file_buff, sz, 1, fp);
   fclose(fp);
-  fprintf(stdout, "Got the file!\n");
-  parse_data();
+  if (check_file_header() < 0) {
+    free(file_buff);
+    return 1;
+  }
+
   free(file_buff);
   return 0;
 }
