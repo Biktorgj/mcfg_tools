@@ -11,13 +11,14 @@
 #define __MCFG_H__
 
 #define MCFG_FILE_HEADER_MAGIC "MCFG"
+#define ELF_OFFSET 8192
 
 struct mcfg_file_header {
-    uint8_t magic[4]; //MCFG
-    uint16_t str1; // 0x02 0x00 
-    uint16_t str2; // 0x01 0x00
-    uint16_t str3; // 0x07 0x00 Either 2 or 7 are version numbers
-    uint8_t padding[6]; // 0x00
+    unsigned char magic[4]; //MCFG
+    uint16_t format_version; // 0x02 0x00 
+    uint16_t config_type; // MCFG_HW is 0, MCFG_SW is 1
+    uint32_t no_of_items; // Number of items in the file 
+    uint8_t padding[4]; // 0x00
 } __attribute__((packed));
 
  struct mcfg_carrier_specific_version { // unsure
