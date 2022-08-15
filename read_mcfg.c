@@ -56,23 +56,25 @@ int check_file_header() {
     
     // We assign the first element by hand, then we will go moving the offset as we parse
     tptr = (struct mcfg_item*) (file_buff + ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data));
-    int newoffset = 0;
+    size_t newoffset = 0;
     for (int i = 0; i < mcfg_head->no_of_items; i++) {
         fprintf(stdout, "Trying to read item %i...\n", i);
-        fprintf(stdout, "Item ID: %.4x | u1: %.2x | u2 %.2x\n", tptr->item_id, tptr->u1, tptr->u2);
-        fprintf(stdout, "Item inside: %.4x of size %.4x\n", tptr->item.id, tptr->item.payload_size);
+        fprintf(stdout, " * Item ID: %.4x | u1: %.2x | u2 %.2x\n", tptr->item_id, tptr->u1, tptr->u2);
+        fprintf(stdout, " * Item inside: %.4x of size %.4x\n", tptr->item.id, tptr->item.payload_size);
         uint8_t buffer[256];
         if (tptr->item.payload_size < 256)
             memcpy(buffer, tptr->item.payload, tptr->item.payload_size);
-        fprintf(stdout, "Payload: %s\n", buffer);
-
+        fprintf(stdout, " * Payload: %s\n", buffer);
 
         newoffset+= (sizeof(struct mcfg_item)+ htole16(tptr->item.payload_size ));
+        fprintf(stdout, " * Next offset: %ld\n", newoffset);
+
         tptr = (struct mcfg_item*) (file_buff + ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data) +newoffset);
     }
     // End of the file
-    fprintf(stdout, "end of the file:\n");
-    for (int k = (ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data) +newoffset); k < sz; k++) {
+    size_t curr_position = (ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data) +newoffset);
+    fprintf(stdout, "end of the file: (%ld from %ld)\n", curr_position, sz);
+    for (size_t k = curr_position; k < sz; k++) {
         fprintf(stdout, "%.2x ", file_buff[k]);
     }
     fprintf(stdout, "\n");
