@@ -33,6 +33,15 @@
 // It seems like most of the time is a 2byte+2byte (id, len), then whatever
 // data it has, pretty much like QMI
 // All nvitems -efs- seem to have a 0x0002 as their id, other types?
+
+/* OH FUCK, it's encapsulated into something else? lets try again */
+        second header   we start here::
+          XXXXX XXXXX XXXXX XX XX |_uint32___  u8 u8 u16--
+00002010  83 13 04 00 03 00 01 05  19 00 00 00 01 09 00 00  |................|
+// Profile name, always 16byte?
+          it.id [len] [0x0d bytes of size]
+00002020  47 00 0d 00 53 57 5f 44  45 46 41 55 4c 54 00 00  |G...SW_DEFAULT..|
+0xd bytes .. _id__ [len] xx xx -u16--
 00002030  00 7b 00 00 00 02 09 00  00 01 00 2e 00 2f 6e 76  |.{.........../nv|
 00002040  2f 69 74 65 6d 5f 66 69  6c 65 73 2f 6d 6f 64 65  |/item_files/mode|
 00002050  6d 2f 6e 61 73 2f 74 64  73 63 64 6d 61 5f 6f 70  |m/nas/tdscdma_op|
