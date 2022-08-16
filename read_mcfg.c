@@ -93,9 +93,22 @@ Example EFS/NV item:
 00002040  00 00 00 01 09 00 00 4b  00 02 00 01 01 0f 00 00  |.......K........|
 00002050  00 01 29 00 00 50 03 03  00 00 02 00 0f 00 00 00  |..)..P..........|
 */
+
+/* Example footer
+    ......                         ..u32 len..?...u32 id..
+00002b40  02 00 04 00 01 00 00 00  4e 00 00 00 0a 00 00 00  |........N.......|
+          footer len  M  C  F  G   _  T  R  L  \0
+00002b50  a1 00 3e 00 4d 43 46 47  5f 54 52 4c 00 02 00 00  |..>.MCFG_TRL....|
+00002b60  01 01 04 00 3d 15 01 02  02 04 00 cc 01 01 00 03  |....=...........|
+00002b70  13 00 43 6f 6d 6d 65 72  63 69 61 6c 2d 43 55 2d  |..Commercial-CU-|
+00002b80  43 53 2d 53 53 04 0a 00  00 02 29 b6 0d 00 29 b6  |CS-SS.....)...).|
+00002b90  0d 00 00 00 50 00 00 00                           |....P...|
+00002b98
+
+*/
 int dump_contents() {
   uint8_t tmpbuffer[sz];
-  for (int i = 0; i < mcfg_file.no_of_items; i++) {
+  for (int i = 0; i < mcfg_file.no_of_items - 1; i++) {
     struct mcfg_item *item;
     item = (struct mcfg_item *)(file_buff + current_file_offset);
 
@@ -164,18 +177,17 @@ int dump_contents() {
       }
 
       break;
-    case MCFG_ITEM_TYPE_TRAIL:
-      fprintf(stdout, "File footer (don't know how to handle this\n");
-      for (int k = current_file_offset; k < sz; k++) {
-        fprintf(stdout, "%.2x ", file_buff[k]);
-      }
-      fprintf(stdout, "\n");
-      break;
     default:
       fprintf(stderr, "I'm broken (type %i):(\n", item->type);
       break;
     }
   }
+
+  fprintf(stdout, "File footer (don't know how to handle this\n");
+  for (int k = current_file_offset; k < sz; k++) {
+    fprintf(stdout, "%.2x ", file_buff[k]);
+  }
+  fprintf(stdout, "\n");
   return 0;
 }
 
