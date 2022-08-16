@@ -97,13 +97,23 @@ Example EFS/NV item:
 /* Example footer
     ......                         ..u32 len..?...u32 id..
 00002b40  02 00 04 00 01 00 00 00  4e 00 00 00 0a 00 00 00  |........N.......|
-          footer len  M  C  F  G   _  T  R  L  \0
+          footer len?  M  C  F  G   _  T  R  L  0   2    256-> 
 00002b50  a1 00 3e 00 4d 43 46 47  5f 54 52 4c 00 02 00 00  |..>.MCFG_TRL....|
+           >  1     4      33625405   2    4    460    1    3 
 00002b60  01 01 04 00 3d 15 01 02  02 04 00 cc 01 01 00 03  |....=...........|
+           19  C  o  m  m  e  r   c  i  a  l   -  C U  -
 00002b70  13 00 43 6f 6d 6d 65 72  63 69 61 6c 2d 43 55 2d  |..Commercial-CU-|
+           C S  -  S  S   4   10      0    2   898601     898601
 00002b80  43 53 2d 53 53 04 0a 00  00 02 29 b6 0d 00 29 b6  |CS-SS.....)...).|
 00002b90  0d 00 00 00 50 00 00 00                           |....P...|
 00002b98
+
+4e000000 <-- len
+0a000000 <-- const
+a100 <-- const
+3e00 <-- changes
+MCFG_TRL
+00 02 00 <-- const
 
 */
 int dump_contents() {

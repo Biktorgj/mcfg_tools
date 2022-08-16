@@ -51,6 +51,38 @@ struct mcfg_item {
   uint16_t padding; // 0x00 0x00
 } __attribute__((packed));
 
+
+struct mcfg_footer {
+  uint32_t len; 
+  uint32_t u1;
+  uint16_t u2;
+  uint16_t u3;
+  uint8_t magic[8];
+  uint8_t foot0; // 0
+  uint16_t foot1; // 2
+  uint16_t foot2; // 256
+
+  uint8_t foot3; // 1
+  uint16_t foot4; // 4
+  uint32_t foot5; // 33625405
+
+  uint8_t foot6; // 2
+  uint16_t foot7; // 4
+  uint16_t foot8; // 460
+  uint16_t foot9; // 1
+
+  uint8_t foot10; // 3
+  uint16_t foot11; // 19 <-- len?
+  uint8_t carrier_config_name[19];
+  
+  uint8_t foot12; // 4
+  uint16_t foot13; // 10
+  uint8_t foot14; // 0
+  uint8_t foot15; // 2?
+  uint32_t foot16[2]; // 898601 898601
+} __attribute__((packed));
+
+
 // Base item IDs
 enum {
   MCFG_CARRIER_NAME = 0x00000019,
@@ -62,7 +94,7 @@ enum {
   MCFG_ITEM_TYPE_NV = 0x01,
   MCFG_ITEM_TYPE_NVFILE = 0x02,
   MCFG_ITEM_TYPE_FILE = 0x04,
-  MCFG_ITEM_TYPE_TRAIL = 0x0A,
+  MCFG_ITEM_TYPE_TRAIL = 0xA1,
 };
 
 /* Attributes */
