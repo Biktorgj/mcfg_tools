@@ -11,6 +11,7 @@ uint8_t *file_buff;
 size_t sz;
 size_t current_file_offset;
 size_t prev_file_offset;
+size_t ELF_OFFSET;
 struct mcfg_file_header mcfg_file;
 
 /* So, some notes here:
@@ -223,6 +224,7 @@ int main(int argc, char *argv[]) {
   char *input_file;
   int c;
   FILE *fp;
+  ELF_OFFSET = 0;
   fprintf(stdout, "Qualcomm MCFG binary file reader \n");
   if (argc < 2) {
     showHelp();
@@ -257,6 +259,16 @@ int main(int argc, char *argv[]) {
 
   current_file_offset = prev_file_offset = 0;
   fclose(fp);
+
+  for (int k = 0 ; k < sz; k++) {
+    if (file_buff[k] == 'M' && 
+        file_buff[k+1] == 'C' && 
+        file_buff[k+2] == 'F' && 
+        file_buff[k+3] == 'G') {
+          ELF_OFFSET = k;
+          break;
+        }
+  }
   if (check_file_header() < 0) {
     free(file_buff);
     return 1;

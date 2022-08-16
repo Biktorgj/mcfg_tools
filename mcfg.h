@@ -13,7 +13,7 @@
 #define MCFG_FILE_HEADER_MAGIC "MCFG"
 #define MCFG_FILE_FOOTER_MAGIC "MCFG_TRL"
 
-#define ELF_OFFSET 8192 // shouldnt hardcode this
+//#define ELF_OFFSET 8192 // shouldnt hardcode this
 #define VERSION_NUM 4995
 
 struct mcfg_file_header {
