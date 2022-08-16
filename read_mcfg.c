@@ -13,7 +13,7 @@ size_t current_file_offset;
 size_t prev_file_offset;
 struct mcfg_file_header mcfg_file;
 
-/* So, some notes here: 
+/* So, some notes here:
 1. 16 byte header
 2. A second header, seemingly 8 byte in size
 Then we have some sort of encapsulated QMI like message, with
@@ -51,15 +51,20 @@ int check_file_header() {
 
     // First element is some kind of subheader with the carrier name?
     // Offset gets poluted with nv data
-    struct mcfg_sub_version_data *version = (struct mcfg_sub_version_data *)(file_buff + ELF_OFFSET + sizeof(struct mcfg_file_header));
+    struct mcfg_sub_version_data *version =
+        (struct mcfg_sub_version_data *)(file_buff + ELF_OFFSET +
+                                         sizeof(struct mcfg_file_header));
     if (version->version == VERSION_NUM) {
-        fprintf(stdout, "Version is %.4x |%.4x |%.2x |%.2x\n", version->unknown1, version->unknown2, version->unknown3, version->unknown4);
+      fprintf(stdout, "Version is %.4x |%.4x |%.2x |%.2x\n", version->unknown1,
+              version->unknown2, version->unknown3, version->unknown4);
+      current_file_offset = ELF_OFFSET + sizeof(struct mcfg_file_header) +
+                            sizeof(struct mcfg_sub_version_data);
     } else {
-        fprintf(stderr, "Oopsies, something is wrong\n");
-        return -EINVAL;
+      fprintf(stderr, "Oopsies, something is wrong\n");
+      return -EINVAL;
     }
     version = NULL;
-    
+
     fprintf(stdout, "--------------------------\n");
   } else {
     fprintf(stderr, "ERROR: Header doesn't match\n");
@@ -78,93 +83,145 @@ Example EFS/NV item:
           -------------> || NEXT FILE...
 000021b0  00 03 09 05 03 39 00 00  00 02 09 00 00 01 00 27  |.....9.........'|
 */
-
+/* Example NV Item type
+    ....                          ..u32 id...  ty at padd
+00002010  83 13 04 00 3d 15 01 02  19 00 00 00 01 09 00 00  |....=...........|
+          nvid  len   <--------payload of (len)-----------
+00002020  47 00 0d 00 43 68 69 6e  61 55 6e 69 63 6f 6d 00  |G...ChinaUnicom.|
+          -> ..u32 id..  ty at paddin nvid  len   paylo
+00002030  00 0e 00 00 00 01 09 00  00 4a 00 02 00 01 01 0e  |.........J......|
+00002040  00 00 00 01 09 00 00 4b  00 02 00 01 01 0f 00 00  |.......K........|
+00002050  00 01 29 00 00 50 03 03  00 00 02 00 0f 00 00 00  |..)..P..........|
+*/
 int dump_contents() {
-  fprintf(stdout, "[%s:%i]: Start \n", __func__, __LINE__);
-  return 0;
-  struct mcfg_file_header *mcfg_head;
-  mcfg_head = (struct mcfg_file_header *)(file_buff + ELF_OFFSET);
-  struct mcfg_item *tptr;
-  if (memcmp(mcfg_head->magic, MCFG_FILE_HEADER_MAGIC, 4) == 0) {
-    fprintf(stdout,
-            "Header is OK:\n"
-            "\t- Magic: %s \n"
-            "\t- Format: %i \n"
-            "\t- Config type: %s\n"
-            "\t- Number of elements in file: %i\n",
-            mcfg_head->magic, mcfg_head->format_version,
-            mcfg_head->config_type < 1 ? "HW" : "SW", mcfg_head->no_of_items);
-    mcfg_file.no_of_items = mcfg_head->no_of_items;
-    mcfg_file.config_type = mcfg_head->config_type;
-    mcfg_file.format_version = mcfg_head->format_version;
-    
-    // First element is some kind of subheader with the carrier name?
-    // Offset gets poluted with nv data
-    struct mcfg_sub_version_data *version = (struct mcfg_sub_version_data *)(file_buff + ELF_OFFSET + sizeof(struct mcfg_file_header));
-    if (version->version == VERSION_NUM) {
-        fprintf(stdout, "Version is %.4x |%.4x |%.2x |%.2x\n", version->unknown1, version->unknown2, version->unknown3, version->unknown4);
-    } else {
-        fprintf(stderr, "Oopsies, something is wrong\n");
-        return -EINVAL;
-    }
-    version = NULL;
-    
-    fprintf(stdout, "--------------------------\n");
-    // We assign the first element by hand, then we will go moving the offset as we parse
-    tptr = (struct mcfg_item*) (file_buff + ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data));
-    current_file_offset = ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data);
+  uint8_t tmpbuffer[sz];
+  for (int i = 0; i < mcfg_file.no_of_items; i++) {
+    struct mcfg_item *item;
+    item = (struct mcfg_item *)(file_buff + current_file_offset);
 
-    size_t newoffset = 0;
-    
-    // I'm not counting as I should
-    for (int i = 0; i < mcfg_head->no_of_items; i++) {
-        fprintf(stdout, "Item #%i\n", i);
-        fprintf(stdout, " |- Block ID: %.8x \n |- u1: %.2x\n |- u2: %.2x\n", tptr->item_id, tptr->u1, tptr->u2);
-        fprintf(stdout, " |-- Item: %.4x of size %.4x\n", tptr->item.id, tptr->item.payload_size);
+    fprintf(stdout, "[%s]: Item %i, type %.2x, attributes %.2x \n", __func__, i,
+            item->type, item->attrib);
+    struct mcfg_nvitem *tmpnvitem;
+    struct mcfg_nvfile_part *this_file_part;
+    current_file_offset += sizeof(struct mcfg_item);
+    switch (item->type) {
+    case MCFG_ITEM_TYPE_NV:
+      tmpnvitem = (struct mcfg_nvitem *)(file_buff + current_file_offset);
+      fprintf(stdout, "NV Item at offset %ld of size %i: ", current_file_offset,
+              tmpnvitem->payload_size);
+      memset(tmpbuffer, 0, sz);
+      memcpy(tmpbuffer, tmpnvitem->payload, tmpnvitem->payload_size);
+      for (int k = 0; k < tmpnvitem->payload_size; k++) {
+        fprintf(stdout, "%c ", tmpbuffer[k]);
+      }
+      fprintf(stdout, "\n");
+      current_file_offset +=
+          sizeof(struct mcfg_nvitem) + tmpnvitem->payload_size;
+      tmpnvitem = NULL;
+      // Do stuff
+      break;
+    case MCFG_ITEM_TYPE_NVFILE:
+    case MCFG_ITEM_TYPE_FILE:
+      for (int k = 0; k < 2; k++) {
+        this_file_part =
+            (struct mcfg_nvfile_part *)(file_buff + current_file_offset);
+        switch (this_file_part->file_section) {
+        case EFS_FILENAME:
+          // FILE NAME
+          fprintf(stdout,
+                  "File at offset %ld of size %i: ", current_file_offset,
+                  this_file_part->section_len);
+          memset(tmpbuffer, 0, sz);
+          memcpy(tmpbuffer, this_file_part->payload,
+                 this_file_part->section_len);
+          for (int k = 0; k < this_file_part->section_len; k++) {
+            fprintf(stdout, "%c", tmpbuffer[k]);
+          }
+          fprintf(stdout, "\n");
+          current_file_offset +=
+              sizeof(struct mcfg_nvfile_part) + this_file_part->section_len;
+          this_file_part = NULL;
+          break;
+        case EFS_FILECONTENTS:
+          // FILE CONTENTS
+          this_file_part =
+              (struct mcfg_nvfile_part *)(file_buff + current_file_offset);
+          fprintf(stdout,
+                  "Contents at offset %ld of size %i: ", current_file_offset,
+                  this_file_part->section_len);
+          memset(tmpbuffer, 0, sz);
+          memcpy(tmpbuffer, this_file_part->payload,
+                 this_file_part->section_len);
+          for (int k = 0; k < this_file_part->section_len; k++) {
+            fprintf(stdout, "%.2x ", tmpbuffer[k]);
+          }
+          fprintf(stdout, "\n");
+          current_file_offset +=
+              sizeof(struct mcfg_nvfile_part) + this_file_part->section_len;
+          this_file_part = NULL;
+          break;
+        }
+      }
+
+      break;
+    default:
+      fprintf(stderr, "I'm broken (type %i):(\n", item->type);
+      break;
+    }
+
+    /*
+        fprintf(stdout, " |-- Item: %.4x of size %.4x\n", tptr->item.id,
+                tptr->item.payload_size);*/
+
+    /*
+
+
         uint8_t buffer[4096];
         memset(buffer, 0, 4096);
         if (tptr->item.payload_size < 4096)
-            memcpy(buffer, tptr->item.payload, tptr->item.payload_size);
+          memcpy(buffer, tptr->item.payload, tptr->item.payload_size);
         fprintf(stdout, " |-- Payload: %s\n", buffer);
         if (tptr->u1 == 0x02 && tptr->u2 == 0x09) {
-            fprintf(stdout, " |-- NV Item: %s\n", buffer);
-
+          fprintf(stdout, " |-- NV Item: %s\n", buffer);
         }
-        switch(tptr->u1) {
-            case MCFG_ITEM_TYPE_NV:
-            fprintf(stdout, "MCFG_ITEM_TYPE_NV: %s\n", buffer);
+        switch (tptr->u1) {
+        case MCFG_ITEM_TYPE_NV:
+          fprintf(stdout, "MCFG_ITEM_TYPE_NV: %s\n", buffer);
 
-            break;
-            case MCFG_ITEM_TYPE_NVFILE:
-            fprintf(stdout, "MCFG_ITEM_TYPE_NVFILE: %s\n", buffer);
-            
-            break;
-            case MVFG_ITEM_TYPE_FILE:
-            fprintf(stdout, "MVFG_ITEM_TYPE_FILE: %s\n", buffer);
-            break;
-            default:
-            fprintf(stdout, "Unkonwn ID %.4x\n", tptr->item.id);
-            break;
+          break;
+        case MCFG_ITEM_TYPE_NVFILE:
+          fprintf(stdout, "MCFG_ITEM_TYPE_NVFILE: %s\n", buffer);
+
+          break;
+        case MVFG_ITEM_TYPE_FILE:
+          fprintf(stdout, "MVFG_ITEM_TYPE_FILE: %s\n", buffer);
+          break;
+        default:
+          fprintf(stdout, "Unkonwn ID %.4x\n", tptr->item.id);
+          break;
         }
 
-        newoffset+= (sizeof(struct mcfg_item)+ htole16(tptr->item.payload_size ));
-        fprintf(stdout, " * Next offset: %ld\n", ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data) +newoffset);
-        if (ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data) +newoffset > sz) {
-          fprintf(stdout, "Err: overflowed!\n");
-          return 1;
+        newoffset += (sizeof(struct mcfg_item) +
+      htole16(tptr->item.payload_size)); fprintf(stdout, " * Next offset:
+      %ld\n", ELF_OFFSET + sizeof(struct mcfg_file_header) + sizeof(struct
+      mcfg_sub_version_data) + newoffset); if (ELF_OFFSET + sizeof(struct
+      mcfg_file_header) + sizeof(struct mcfg_sub_version_data) + newoffset > sz)
+      { fprintf(stdout, "Err: overflowed!\n"); return 1;
         }
-        tptr = (struct mcfg_item*) (file_buff + ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data) +newoffset);
-    }
-    // End of the file
-    size_t curr_position = (ELF_OFFSET + sizeof(struct mcfg_file_header)+ sizeof(struct mcfg_sub_version_data) +newoffset);
-    fprintf(stdout, "end of the file: (%ld from %ld)\n", curr_position, sz);
-    for (size_t k = curr_position; k < sz; k++) {
+        tptr =
+            (struct mcfg_item *)(file_buff + ELF_OFFSET +
+                                 sizeof(struct mcfg_file_header) +
+                                 sizeof(struct mcfg_sub_version_data) +
+      newoffset);
+      }
+      // End of the file
+      size_t curr_position = (ELF_OFFSET + sizeof(struct mcfg_file_header) +
+                              sizeof(struct mcfg_sub_version_data) + newoffset);
+      fprintf(stdout, "end of the file: (%ld from %ld)\n", curr_position, sz);
+      for (size_t k = curr_position; k < sz; k++) {
         fprintf(stdout, "%.2x ", file_buff[k]);
-    }
-    fprintf(stdout, "\n");
-  } else {
-    fprintf(stderr, "ERROR: Header doesn't match\n");
-    return -EINVAL;
+      }
+      fprintf(stdout, "\n");*/
   }
   return 0;
 }

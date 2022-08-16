@@ -30,18 +30,23 @@ struct mcfg_sub_version_data { // unsure
   uint8_t unknown4;            // 0x02
 } __attribute__((packed));
 
-struct mcfg_config_item {
+struct mcfg_nvitem {
   uint16_t id;           // EFS NV element?
   uint16_t payload_size; // Size of the rest of the item
   uint8_t *payload[0];
 } __attribute__((packed));
 
+struct mcfg_nvfile_part {
+    uint16_t file_section; // 0x01 for filename, 0x02 for file contents
+    uint16_t section_len; // size of this piece
+    uint8_t *payload[0];
+} __attribute__((packed));
+
 struct mcfg_item {
-  uint32_t item_id; // EFS NV element?
-  uint8_t u1;       // 0x01 || <-- ITEM TYPE?
-  uint8_t u2;       // 0x09 0x29? <-- Attributes?
+  uint32_t id; // EFS NV element?
+  uint8_t type;       // 0x01 || <-- ITEM TYPE?
+  uint8_t attrib;       // 0x09 0x29? <-- Attributes?
   uint16_t padding; // 0x00 0x00
-  struct mcfg_config_item item;
 } __attribute__((packed));
 
 // Base item IDs
@@ -60,7 +65,7 @@ enum {
 enum {
   MCFG_ITEM_TYPE_NV = 0x01,
   MCFG_ITEM_TYPE_NVFILE = 0x02,
-  MVFG_ITEM_TYPE_FILE = 0x04,
+  MCFG_ITEM_TYPE_FILE = 0x04,
 };
 
 /* Attributes */
@@ -70,4 +75,9 @@ enum {
     ATTRIB_MODE_2A = 0x2A,
 };
 
+/* EFS file sections */
+enum {
+    EFS_FILENAME = 0x01,
+    EFS_FILECONTENTS = 0x02,
+};
 #endif
