@@ -92,10 +92,20 @@ struct mcfg_footer_section_4 {
   uint16_t len; // 10
   uint8_t foot14; // 0
   uint8_t num_iccids; // 2?
-  uint32_t *iccids[]; // 898601 898601
+  uint32_t *iccids[0]; // 898601 898601
 } __attribute__((packed));
 
 struct mcfg_footer {
+  uint32_t len; 
+  uint32_t u1;
+  uint16_t u2;
+  uint16_t u3;
+  unsigned char magic[8];
+} __attribute__((packed));
+
+  /* MOTHERFUCKERS! 
+  Just like fucking QMI */
+struct mcfg_footer_samp {
   uint32_t len; 
   uint32_t u1;
   uint16_t u2;
