@@ -51,6 +51,49 @@ struct mcfg_item {
   uint16_t padding; // 0x00 0x00
 } __attribute__((packed));
 
+// Constant, some magic identifier?
+struct mcfg_footer_section_0 {
+    uint8_t id; // 0x00
+    uint16_t len; // 2 bytes
+    uint16_t data; // 256
+} __attribute__((packed));
+
+// This changes in different files, although structure stays
+struct mcfg_footer_section_1 {
+    uint8_t id; // 0x01
+    uint16_t len; // 4 bytes
+    uint32_t data; // 33625405
+} __attribute__((packed));
+
+// Network
+struct mcfg_footer_section_2 {
+    uint8_t id; // 0x01
+    uint16_t len; // 4 bytes
+    uint16_t mcc; // 460
+    uint16_t mnc; // 01
+} __attribute__((packed));
+
+// Carrier name, as shown in QMBNCFG?
+struct mcfg_footer_section_3 {
+  uint8_t id; // 3
+  uint16_t len; // 19 <-- len?
+  uint8_t *carrier_config_name[];
+} __attribute__((packed));
+
+
+// No fucking clue
+/*
+Is this something about the iccids?
+https://forums.quectel.com/t/document-sharing-sim-card/16046
+https://blog.karthisoftek.com/a?ID=00900-29badf5d-bd0a-47f7-b3fc-eb900c57e003
+*/
+struct mcfg_footer_section_4 {
+  uint8_t id; // 4
+  uint16_t len; // 10
+  uint8_t foot14; // 0
+  uint8_t num_iccids; // 2?
+  uint32_t *iccids[]; // 898601 898601
+} __attribute__((packed));
 
 struct mcfg_footer {
   uint32_t len; 
