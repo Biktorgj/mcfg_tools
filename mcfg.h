@@ -11,7 +11,9 @@
 #define __MCFG_H__
 
 #define MCFG_FILE_HEADER_MAGIC "MCFG"
-#define ELF_OFFSET 8192
+#define MCFG_FILE_FOOTER_MAGIC "MCFG_TRL"
+
+#define ELF_OFFSET 8192 // shouldnt hardcode this
 #define VERSION_NUM 4995
 
 struct mcfg_file_header {
@@ -54,18 +56,13 @@ enum {
   MCFG_CARRIER_NAME = 0x00000019,
 };
 
-// Config Item IDs
-enum {
-  MCFG_EFS_FILE = 0x02,
-  MCFG_FOOTER = 0xA1,
-};
-
 /* Item types, borrowed from
  * https://github.com/JohnBel/EfsTools/blob/master/EfsTools/Mbn/ItemType.cs */
 enum {
   MCFG_ITEM_TYPE_NV = 0x01,
   MCFG_ITEM_TYPE_NVFILE = 0x02,
   MCFG_ITEM_TYPE_FILE = 0x04,
+  MCFG_ITEM_TYPE_TRAIL = 0x0A,
 };
 
 /* Attributes */
@@ -80,4 +77,5 @@ enum {
     EFS_FILENAME = 0x01,
     EFS_FILECONTENTS = 0x02,
 };
+
 #endif

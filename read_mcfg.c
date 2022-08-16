@@ -164,64 +164,17 @@ int dump_contents() {
       }
 
       break;
+    case MCFG_ITEM_TYPE_TRAIL:
+      fprintf(stdout, "File footer (don't know how to handle this\n");
+      for (int k = current_file_offset; k < sz; k++) {
+        fprintf(stdout, "%.2x ", file_buff[k]);
+      }
+      fprintf(stdout, "\n");
+      break;
     default:
       fprintf(stderr, "I'm broken (type %i):(\n", item->type);
       break;
     }
-
-    /*
-        fprintf(stdout, " |-- Item: %.4x of size %.4x\n", tptr->item.id,
-                tptr->item.payload_size);*/
-
-    /*
-
-
-        uint8_t buffer[4096];
-        memset(buffer, 0, 4096);
-        if (tptr->item.payload_size < 4096)
-          memcpy(buffer, tptr->item.payload, tptr->item.payload_size);
-        fprintf(stdout, " |-- Payload: %s\n", buffer);
-        if (tptr->u1 == 0x02 && tptr->u2 == 0x09) {
-          fprintf(stdout, " |-- NV Item: %s\n", buffer);
-        }
-        switch (tptr->u1) {
-        case MCFG_ITEM_TYPE_NV:
-          fprintf(stdout, "MCFG_ITEM_TYPE_NV: %s\n", buffer);
-
-          break;
-        case MCFG_ITEM_TYPE_NVFILE:
-          fprintf(stdout, "MCFG_ITEM_TYPE_NVFILE: %s\n", buffer);
-
-          break;
-        case MVFG_ITEM_TYPE_FILE:
-          fprintf(stdout, "MVFG_ITEM_TYPE_FILE: %s\n", buffer);
-          break;
-        default:
-          fprintf(stdout, "Unkonwn ID %.4x\n", tptr->item.id);
-          break;
-        }
-
-        newoffset += (sizeof(struct mcfg_item) +
-      htole16(tptr->item.payload_size)); fprintf(stdout, " * Next offset:
-      %ld\n", ELF_OFFSET + sizeof(struct mcfg_file_header) + sizeof(struct
-      mcfg_sub_version_data) + newoffset); if (ELF_OFFSET + sizeof(struct
-      mcfg_file_header) + sizeof(struct mcfg_sub_version_data) + newoffset > sz)
-      { fprintf(stdout, "Err: overflowed!\n"); return 1;
-        }
-        tptr =
-            (struct mcfg_item *)(file_buff + ELF_OFFSET +
-                                 sizeof(struct mcfg_file_header) +
-                                 sizeof(struct mcfg_sub_version_data) +
-      newoffset);
-      }
-      // End of the file
-      size_t curr_position = (ELF_OFFSET + sizeof(struct mcfg_file_header) +
-                              sizeof(struct mcfg_sub_version_data) + newoffset);
-      fprintf(stdout, "end of the file: (%ld from %ld)\n", curr_position, sz);
-      for (size_t k = curr_position; k < sz; k++) {
-        fprintf(stdout, "%.2x ", file_buff[k]);
-      }
-      fprintf(stdout, "\n");*/
   }
   return 0;
 }
