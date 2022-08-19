@@ -1,4 +1,5 @@
 #include "mcfg.h"
+#include <asm-generic/errno-base.h>
 #include <endian.h>
 #include <fcntl.h>
 #include <stdint.h>
@@ -32,6 +33,73 @@ void showHelp() {
   fprintf(stdout, "  read_mcfg -i INPUT_FILE \n");
   fprintf(stdout, "Arguments: \n"
                   "\t-i: Input file to read\n");
+}
+/*
+mcfg files have elf header + 3x program header + 0 dyn / shared headers
+
+
+
+*/
+int get_elf() {
+  fprintf(stdout, "Check ELF header...\n");
+  struct ElfN_Ehdr *elf_hdr = (struct ElfN_Ehdr *)file_buff;
+  if (sz < sizeof(struct ElfN_Ehdr)) {
+    fprintf(stdout, "The file is so small it can't hold the elf header!\n");
+    return -ENOSPC;
+  }
+
+  if (memcmp(elf_hdr->e_ident, ELFMAG, 4) != 0) {
+    fprintf(stdout, "ELF header doesn't match\n");
+    return -EINVAL;
+  }
+
+  fprintf(stdout, "Elf header details:\n");
+  fprintf(stdout, " * Type: %x\n", elf_hdr->e_type);
+  fprintf(stdout, " * Machine: %x\n", elf_hdr->e_machine);
+  fprintf(stdout, " * Version: %x\n", elf_hdr->e_version);
+  fprintf(stdout, " * Entry: %x\n", elf_hdr->e_entry);
+  fprintf(stdout, " * Program headers offset: %x\n", elf_hdr->e_phoff);
+  fprintf(stdout, " * Section headers offset: %i\n", elf_hdr->e_shoff);
+  fprintf(stdout, " * Flags: %x\n", elf_hdr->e_flags);
+  fprintf(stdout, " * ELF Header size: %i\n", elf_hdr->e_ehsize);
+  fprintf(stdout, " * Program header size: %i\n", elf_hdr->e_phentsize);
+  fprintf(stdout, " * Program header num: %x\n", elf_hdr->e_phnum);
+  fprintf(stdout, " * Section header size: %i\n", elf_hdr->e_shentsize);
+  fprintf(stdout, " * Section header num: %x\n", elf_hdr->e_shnum);
+  fprintf(stdout, " * Section header idx: %x\n", elf_hdr->e_shstrndx);
+  for (int i = 0; i < sizeof(struct ElfN_Ehdr); i++) {
+    fprintf(stdout, "%.2x ", file_buff[i]);
+    if (i == 15 || i == 31 || i == 47) {
+      printf("\n");
+    }
+  }
+  fprintf(stdout, "\n");
+  for (int i = 0; i < elf_hdr->e_phnum; i++) {
+    int cur_offset = elf_hdr->e_phoff + (i * sizeof(struct elf32_phdr));
+    struct elf32_phdr *phdr = (struct elf32_phdr *)(file_buff + cur_offset);
+    fprintf(stdout, "Program header %i details:\n", i);
+    fprintf(stdout, " * p_type %x\n", phdr->p_type);
+    fprintf(stdout, " * p_offset at %i bytes (0x%x)\n", phdr->p_offset,
+            phdr->p_offset);
+    fprintf(stdout, " * p_vaddr %x\n", phdr->p_vaddr);
+    fprintf(stdout, " * p_paddr %x\n", phdr->p_paddr);
+    fprintf(stdout, " * p_filesz %i\n", phdr->p_filesz);
+    fprintf(stdout, " * p_memsz %x\n", phdr->p_memsz);
+    fprintf(stdout, " * p_flags 0x%x\n", phdr->p_flags);
+    fprintf(stdout, " * p_align %i\n", phdr->p_align);
+    int count = 0;
+    for (int k = cur_offset; k < cur_offset + sizeof(struct elf32_phdr); k++) {
+      fprintf(stdout, "%.2x ", file_buff[k]);
+      count++;
+      if (count > 15) {
+        printf("\n");
+        count = 0;
+      }
+    }
+    fprintf(stdout, "\n");
+  }
+
+  return 0;
 }
 
 int check_file_header() {
@@ -98,9 +166,9 @@ Example EFS/NV item:
 /* Example footer
     ......                         ..u32 len..?...u32 id..
 00002b40  02 00 04 00 01 00 00 00  4e 00 00 00 0a 00 00 00  |........N.......|
-          footer len?  M  C  F  G   _  T  R  L  0   2    256-> 
+          footer len?  M  C  F  G   _  T  R  L  0   2    256->
 00002b50  a1 00 3e 00 4d 43 46 47  5f 54 52 4c 00 02 00 00  |..>.MCFG_TRL....|
-           >  1     4      33625405   2    4    460    1    3 
+           >  1     4      33625405   2    4    460    1    3
 00002b60  01 01 04 00 3d 15 01 02  02 04 00 cc 01 01 00 03  |....=...........|
            19  C  o  m  m  e  r   c  i  a  l   -  C U  -
 00002b70  13 00 43 6f 6d 6d 65 72  63 69 61 6c 2d 43 55 2d  |..Commercial-CU-|
@@ -199,24 +267,36 @@ int dump_contents() {
     fprintf(stdout, "%.2x ", file_buff[k]);
   }
   fprintf(stdout, "\n");
-  struct mcfg_footer *footer = (struct mcfg_footer *)(file_buff+current_file_offset);
-  fprintf(stdout, "Checking in: %s, size %i bytes\n", footer->magic, footer->len);
-  current_file_offset+=sizeof(struct mcfg_footer);
-  struct mcfg_footer_section_0 *sec0 = (struct mcfg_footer_section_0 *)(file_buff+current_file_offset);
-  fprintf(stdout, "Footer section 0 id %i of size %i, data %i\n", sec0->id, sec0->len, sec0->data);
-  current_file_offset+=sizeof(struct mcfg_footer_section_0);
-  struct mcfg_footer_section_1 *sec1 = (struct mcfg_footer_section_1 *)(file_buff+current_file_offset);
-  fprintf(stdout, "Footer section 1 id %i of size %i, data %i\n", sec1->id, sec1->len, sec1->data);
-  current_file_offset+=sizeof(struct mcfg_footer_section_1);
-  struct mcfg_footer_section_2 *sec2 = (struct mcfg_footer_section_2 *)(file_buff+current_file_offset);
-  fprintf(stdout, "Footer section 2 id %i of size %i, MCC-MNC %i-%i\n", sec2->id, sec2->len, sec2->mcc, sec2->mnc);
-  current_file_offset+=sizeof(struct mcfg_footer_section_2);
-  struct mcfg_footer_section_3 *sec3 = (struct mcfg_footer_section_3 *)(file_buff+current_file_offset);
-  fprintf(stdout, "Footer section 3 id %i of size %i, name %s\n", sec3->id, sec3->len, sec3->carrier_config_name);
-  current_file_offset+=sizeof(struct mcfg_footer_section_3) + sec3->len;
-  struct mcfg_footer_section_4 *sec4 = (struct mcfg_footer_section_4 *)(file_buff+current_file_offset);
-  fprintf(stdout, "Footer section 4 id %i of size %i, data %i\n", sec4->id, sec4->len, sec4->iccids[0]);
-  
+  struct mcfg_footer *footer =
+      (struct mcfg_footer *)(file_buff + current_file_offset);
+  fprintf(stdout, "Checking in: %s, size %i bytes\n", footer->magic,
+          footer->len);
+  current_file_offset += sizeof(struct mcfg_footer);
+  struct mcfg_footer_section_0 *sec0 =
+      (struct mcfg_footer_section_0 *)(file_buff + current_file_offset);
+  fprintf(stdout, "Footer section 0 id %i of size %i, data %i\n", sec0->id,
+          sec0->len, sec0->data);
+  current_file_offset += sizeof(struct mcfg_footer_section_0);
+  struct mcfg_footer_section_1 *sec1 =
+      (struct mcfg_footer_section_1 *)(file_buff + current_file_offset);
+  fprintf(stdout, "Footer section 1 id %i of size %i, data %i\n", sec1->id,
+          sec1->len, sec1->data);
+  current_file_offset += sizeof(struct mcfg_footer_section_1);
+  struct mcfg_footer_section_2 *sec2 =
+      (struct mcfg_footer_section_2 *)(file_buff + current_file_offset);
+  fprintf(stdout, "Footer section 2 id %i of size %i, MCC-MNC %i-%i\n",
+          sec2->id, sec2->len, sec2->mcc, sec2->mnc);
+  current_file_offset += sizeof(struct mcfg_footer_section_2);
+  struct mcfg_footer_section_3 *sec3 =
+      (struct mcfg_footer_section_3 *)(file_buff + current_file_offset);
+  fprintf(stdout, "Footer section 3 id %i of size %i, name %s\n", sec3->id,
+          sec3->len, (char *)sec3->carrier_config_name);
+  current_file_offset += sizeof(struct mcfg_footer_section_3) + sec3->len;
+  struct mcfg_footer_section_4 *sec4 =
+      (struct mcfg_footer_section_4 *)(file_buff + current_file_offset);
+  fprintf(stdout, "Footer section 4 id %i of size %i, data %i\n", sec4->id,
+          sec4->len, sec4->iccids[0]);
+
   return 0;
 }
 
@@ -260,14 +340,17 @@ int main(int argc, char *argv[]) {
   current_file_offset = prev_file_offset = 0;
   fclose(fp);
 
-  for (int k = 0 ; k < sz; k++) {
-    if (file_buff[k] == 'M' && 
-        file_buff[k+1] == 'C' && 
-        file_buff[k+2] == 'F' && 
-        file_buff[k+3] == 'G') {
-          ELF_OFFSET = k;
-          break;
-        }
+  for (int k = 0; k < sz; k++) {
+    if (file_buff[k] == 'M' && file_buff[k + 1] == 'C' &&
+        file_buff[k + 2] == 'F' && file_buff[k + 3] == 'G') {
+      ELF_OFFSET = k;
+      break;
+    }
+  }
+
+  if (get_elf() < 0) {
+    free(file_buff);
+    return 1;
   }
   if (check_file_header() < 0) {
     free(file_buff);
