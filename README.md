@@ -26,3 +26,4 @@ These files are what make IMS work (or not) in some modems.
 
 1. Run `make`
 
+This code uses SHA256 implementation from https://github.com/983/SHA-256

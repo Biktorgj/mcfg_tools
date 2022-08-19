@@ -134,6 +134,9 @@ struct hash_segment_header {
   uint32_t signature_size;  // 00 00 00 00
   uint32_t cert_chain_addr; // 88 10 00 00
   uint32_t cert_chain_size; // 00 00 00 00
+  uint8_t hash1[32];
+  uint8_t padding[32];
+  uint8_t hash2[32];
   /*
   uint8_t hash1[32]; //b5 10 06 96 85 4e b8 1e f2 12 bb d4 92 99 de fe 1f 5b 53
   26 8e 04 98 d8 a0 e0 45 e8 d9 48 a4 45 uint8_t padding[32]; // 0x00 uint8_t

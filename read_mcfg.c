@@ -1,4 +1,5 @@
 #include "mcfg.h"
+#include "sha256.h"
 #include <asm-generic/errno-base.h>
 #include <endian.h>
 #include <fcntl.h>
@@ -41,6 +42,7 @@ mcfg files have elf header + 3x program header + 0 dyn / shared headers
 
 */
 int get_elf() {
+  uint32_t hash_offset = 0;
   fprintf(stdout, "Check ELF header...\n");
   struct ElfN_Ehdr *elf_hdr = (struct ElfN_Ehdr *)file_buff;
   if (sz < sizeof(struct ElfN_Ehdr)) {
@@ -88,6 +90,9 @@ int get_elf() {
     fprintf(stdout, " * p_flags 0x%x\n", phdr->p_flags);
     fprintf(stdout, " * p_align %i\n", phdr->p_align);
     int count = 0;
+    if (i == 1) {
+      hash_offset = phdr->p_offset;
+    }
     for (int k = cur_offset; k < cur_offset + sizeof(struct elf32_phdr); k++) {
       fprintf(stdout, "%.2x ", file_buff[k]);
       count++;
@@ -99,6 +104,49 @@ int get_elf() {
     fprintf(stdout, "\n");
   }
 
+  fprintf(stdout, "Hashes:\n");
+  struct hash_segment_header *hash_segment =
+      (struct hash_segment_header *)(file_buff + hash_offset);
+  fprintf(stdout, " * Version %x \n", hash_segment->version);
+  fprintf(stdout, " * type %x \n", hash_segment->type);
+  fprintf(stdout, " * flash_addr %x \n", hash_segment->flash_addr);
+  fprintf(stdout, " * dest_addr %x \n", hash_segment->dest_addr);
+  fprintf(stdout, " * total_size %x \n", hash_segment->total_size);
+  fprintf(stdout, " * hash_size %x \n", hash_segment->hash_size);
+  fprintf(stdout, " * signature_addr %x \n", hash_segment->signature_addr);
+  fprintf(stdout, " * signature_size %x \n", hash_segment->signature_size);
+  fprintf(stdout, " * cert_chain_addr %x \n", hash_segment->cert_chain_addr);
+  fprintf(stdout, " * cert_chain_size %x \n", hash_segment->cert_chain_size);
+  for (int i = 0; i < 32; i++) {
+    fprintf(stdout, "%.2x ", hash_segment->hash1[i]);
+  }
+  fprintf(stdout, " hash1 \n");
+  for (int i = 0; i < 32; i++) {
+    fprintf(stdout, "%.2x ", hash_segment->hash2[i]);
+  }
+  fprintf(stdout, " hash2 \n");
+  int shabufsize =
+      sizeof(struct ElfN_Ehdr) + (elf_hdr->e_phnum * sizeof(struct elf32_phdr));
+  uint8_t shabuf[shabufsize];
+  memcpy(shabuf, file_buff, sizeof(struct ElfN_Ehdr));
+  memcpy(shabuf + sizeof(struct ElfN_Ehdr), file_buff + elf_hdr->e_phoff,
+         elf_hdr->e_phnum * sizeof(struct elf32_phdr));
+
+  /* Compute SHA-256 sum. */
+  // Hash 2:
+  char hex_hash1[SHA256_HEX_SIZE];
+  sha256_hex((shabuf), shabufsize, hex_hash1);
+
+  /* Print result. */
+  printf("HASH 2 SHA-256 sum is:\n");
+  printf("%s\n", hex_hash1);
+  // Hash 2:
+  char hex[SHA256_HEX_SIZE];
+  sha256_hex((file_buff + 0x2000), sz - 0x2000, hex);
+
+  /* Print result. */
+  printf("HASH 2 SHA-256 sum is:\n");
+  printf("%s\n", hex);
   return 0;
 }
 
