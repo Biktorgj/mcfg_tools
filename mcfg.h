@@ -190,9 +190,29 @@ struct mcfg_footer_section_4 {
 struct mcfg_footer_section_5 {
   uint8_t id;          // 5
   uint16_t len;        // 4
+  uint32_t data; 
+} __attribute__((packed));
+
+// Unknown, some have it, some don't
+struct mcfg_footer_section_6 {
+  uint8_t id;          // 6
+  uint16_t len;        // ??
   uint8_t *data; 
 } __attribute__((packed));
 
+// Unknown, some have it, some don't
+struct mcfg_footer_section_7 {
+  uint8_t id;          // 7
+  uint16_t len;        // 4
+  uint32_t data; 
+} __attribute__((packed));
+
+// Unknown, some have it, some don't
+struct mcfg_footer_section_8 {
+  uint8_t id;          // 8
+  uint16_t len;        // 32
+  uint8_t data[32]; 
+} __attribute__((packed));
 
 struct mcfg_footer {
   uint32_t len;

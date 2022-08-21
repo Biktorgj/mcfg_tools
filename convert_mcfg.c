@@ -384,6 +384,13 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
   // Pointers to reuse later
   struct mcfg_footer_section_0 *sec0;
   struct mcfg_footer_section_1 *sec1;
+  struct mcfg_footer_section_2 *sec2;
+  struct mcfg_footer_section_3 *sec3;
+  struct mcfg_footer_section_4 *sec4;
+  struct mcfg_footer_section_5 *sec5;
+  struct mcfg_footer_section_6 *sec6;
+  struct mcfg_footer_section_7 *sec7;
+  struct mcfg_footer_section_8 *sec8;
   /* Now find each section */
   do {
     struct mcfg_footer_proto *proto =
@@ -393,25 +400,39 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
     switch (proto->id) {
     case 0: // Fixed size, 2 bytes, CONSTANT
       sec0 = (struct mcfg_footer_section_0 *)(footer + curr_obj_offset);
-      fprintf(stdout, "Version %i\n", sec0->data);
+      fprintf(stdout, "Version1 %i\n", sec0->data);
       break;
     case 1: // Fixed size, 4 bytes
       sec1 = (struct mcfg_footer_section_1 *)(footer + curr_obj_offset);
-      fprintf(stdout, "xxDATA %i\n", sec1->data);
+      fprintf(stdout, "Version2 %i\n", sec1->data);
       break;
     case 2: // MCC+MNC
+      sec2 = (struct mcfg_footer_section_2 *)(footer + curr_obj_offset);
+      fprintf(stdout, "MCC %i-%i\n", sec2->mcc, sec2->mnc);
       break;
     case 3: // Carrier name
+      sec3 = (struct mcfg_footer_section_3 *)(footer + curr_obj_offset);
+      fprintf(stdout, "Carrier %s\n", (char*)sec3->carrier_config_name);
       break;
     case 4: // ICCIDs
+      sec4 = (struct mcfg_footer_section_4 *)(footer + curr_obj_offset);
+      fprintf(stdout, "ICC ID 0: %i\n", sec4->iccids[0]);
       break;
     case 5: // Fixed size, 4 byte
+      sec5 = (struct mcfg_footer_section_5 *)(footer + curr_obj_offset);
+      fprintf(stdout, "Sec5 %i\n", sec5->data);
       break;
     case 6: // Variable size
+      sec6 = (struct mcfg_footer_section_6 *)(footer + curr_obj_offset);
+      fprintf(stdout, "SEC6 %i\n", sec6->data);
       break;
     case 7: // Fixed size, 4 byte
+      sec7 = (struct mcfg_footer_section_7 *)(footer + curr_obj_offset);
+      fprintf(stdout, "Sec7 %i\n", sec7->data);
       break;
     case 8: // Fixed size, 32 byte
+      sec8 = (struct mcfg_footer_section_8 *)(footer + curr_obj_offset);
+      fprintf(stdout, "Sec8 %s\n", sec8->data);
       break;
     default:
       fprintf(stderr, "WARNING: Unknown section %i in the footer at offset %i\n", proto->id, curr_obj_offset);
