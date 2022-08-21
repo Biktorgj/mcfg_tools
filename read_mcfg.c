@@ -44,8 +44,8 @@ mcfg files have elf header + 3x program header + 0 dyn / shared headers
 int get_elf() {
   uint32_t hash_offset = 0;
   fprintf(stdout, "Check ELF header...\n");
-  struct ElfN_Ehdr *elf_hdr = (struct ElfN_Ehdr *)file_buff;
-  if (sz < sizeof(struct ElfN_Ehdr)) {
+  struct Elf32_Ehdr *elf_hdr = (struct Elf32_Ehdr *)file_buff;
+  if (sz < sizeof(struct Elf32_Ehdr)) {
     fprintf(stdout, "The file is so small it can't hold the elf header!\n");
     return -ENOSPC;
   }
@@ -69,7 +69,7 @@ int get_elf() {
   fprintf(stdout, " * Section header size: %i\n", elf_hdr->e_shentsize);
   fprintf(stdout, " * Section header num: %x\n", elf_hdr->e_shnum);
   fprintf(stdout, " * Section header idx: %x\n", elf_hdr->e_shstrndx);
-  for (int i = 0; i < sizeof(struct ElfN_Ehdr); i++) {
+  for (int i = 0; i < sizeof(struct Elf32_Ehdr); i++) {
     fprintf(stdout, "%.2x ", file_buff[i]);
     if (i == 15 || i == 31 || i == 47) {
       printf("\n");
@@ -126,10 +126,10 @@ int get_elf() {
   }
   fprintf(stdout, " hash2 \n");
   int shabufsize =
-      sizeof(struct ElfN_Ehdr) + (elf_hdr->e_phnum * sizeof(struct elf32_phdr));
+      sizeof(struct Elf32_Ehdr) + (elf_hdr->e_phnum * sizeof(struct elf32_phdr));
   uint8_t shabuf[shabufsize];
-  memcpy(shabuf, file_buff, sizeof(struct ElfN_Ehdr));
-  memcpy(shabuf + sizeof(struct ElfN_Ehdr), file_buff + elf_hdr->e_phoff,
+  memcpy(shabuf, file_buff, sizeof(struct Elf32_Ehdr));
+  memcpy(shabuf + sizeof(struct Elf32_Ehdr), file_buff + elf_hdr->e_phoff,
          elf_hdr->e_phnum * sizeof(struct elf32_phdr));
 
   /* Compute SHA-256 sum. */
@@ -342,8 +342,8 @@ int dump_contents() {
   current_file_offset += sizeof(struct mcfg_footer_section_3) + sec3->len;
   struct mcfg_footer_section_4 *sec4 =
       (struct mcfg_footer_section_4 *)(file_buff + current_file_offset);
-  fprintf(stdout, "Footer section 4 id %i of size %i, data %i\n", sec4->id,
-          sec4->len, sec4->iccids[0]);
+  fprintf(stdout, "Footer section 4 id %i of size %i\n", sec4->id,
+          sec4->len);
 
   return 0;
 }

@@ -15,6 +15,8 @@
 
 //#define ELF_OFFSET 8192 // shouldnt hardcode this
 #define VERSION_NUM 4995
+#define MAX_NUM_ICCIDS 32
+#define MAX_OBJ_SIZE 16384
 /* ELF Headers */
 
 /* 32-bit ELF base types. */
@@ -27,7 +29,15 @@ typedef uint32_t Elf32_Word;
 #define EI_NIDENT 16
 #define ELFMAG "\177ELF"
 
-struct ElfN_Ehdr {
+struct nv_item {
+  uint32_t id;
+  uint8_t type;
+  uint16_t offset;
+  uint16_t size;
+  uint8_t blob[MAX_OBJ_SIZE];
+};
+
+struct Elf32_Ehdr {
   unsigned char e_ident[EI_NIDENT];
   uint16_t e_type;
   uint16_t e_machine;
@@ -61,68 +71,6 @@ struct elf32_phdr {
   Elf32_Word p_align;
 };
 
-/* sh_type */
-#define SHT_NULL 0
-#define SHT_PROGBITS 1
-#define SHT_SYMTAB 2
-#define SHT_STRTAB 3
-#define SHT_RELA 4
-#define SHT_HASH 5
-#define SHT_DYNAMIC 6
-#define SHT_NOTE 7
-#define SHT_NOBITS 8
-#define SHT_REL 9
-#define SHT_SHLIB 10
-#define SHT_DYNSYM 11
-#define SHT_NUM 12
-#define SHT_LOPROC 0x70000000
-#define SHT_HIPROC 0x7fffffff
-#define SHT_LOUSER 0x80000000
-#define SHT_HIUSER 0xffffffff
-
-/* sh_flags */
-#define SHF_WRITE 0x1
-#define SHF_ALLOC 0x2
-#define SHF_EXECINSTR 0x4
-#define SHF_RELA_LIVEPATCH 0x00100000
-#define SHF_RO_AFTER_INIT 0x00200000
-#define SHF_MASKPROC 0xf0000000
-
-/* special section indexes */
-#define SHN_UNDEF 0
-#define SHN_LORESERVE 0xff00
-#define SHN_LOPROC 0xff00
-#define SHN_HIPROC 0xff1f
-#define SHN_LIVEPATCH 0xff20
-#define SHN_ABS 0xfff1
-#define SHN_COMMON 0xfff2
-#define SHN_HIRESERVE 0xffff
-
-typedef struct elf32_shdr {
-  Elf32_Word sh_name;
-  Elf32_Word sh_type;
-  Elf32_Word sh_flags;
-  Elf32_Addr sh_addr;
-  Elf32_Off sh_offset;
-  Elf32_Word sh_size;
-  Elf32_Word sh_link;
-  Elf32_Word sh_info;
-  Elf32_Word sh_addralign;
-  Elf32_Word sh_entsize;
-} Elf32_Shdr;
-
-/*
-        version: int  # Header version number
-        type: int  # Type of "image" (always 0x3?)
-        flash_addr: int  # Location of image in flash (always 0?)
-        dest_addr: int  # Physical address of loaded hash segment data
-        total_size: int  # = code_size + signature_size + cert_chain_size
-        hash_size: int  # Size of SHA256 hashes for each program segment
-        signature_addr: int  # Physical address of loaded attestation signature
-        signature_size: int  # Size of attestation signature
-        cert_chain_addr: int  # Physical address of loaded certificate chain
-        cert_chain_size: int  # Size of certificate chain
-*/
 struct hash_segment_header {
   uint32_t version;         // 0x00
   uint32_t type;            // 0x03
@@ -139,10 +87,11 @@ struct hash_segment_header {
   uint8_t hash2[32];
   /*
   uint8_t hash1[32]; //b5 10 06 96 85 4e b8 1e f2 12 bb d4 92 99 de fe 1f 5b 53
-  26 8e 04 98 d8 a0 e0 45 e8 d9 48 a4 45 uint8_t padding[32]; // 0x00 uint8_t
-  hash2[32]; //45 81 10 ce 40 ba ea fa e0 a8 06 12 8e cc 37 91 d6 9c c8 fd eb 24
-  4d 76 04 8d eb da 76 20 b3 ca uint8_t padding[32]; // 0x00 all the rest of the
-  file (hash1 + padding + hash2 == 0x60 (96byte)
+  26 8e 04 98 d8 a0 e0 45 e8 d9 48 a4 45 
+  uint8_t padding[32]; // 0x00 
+  uint8_t hash2[32]; //45 81 10 ce 40 ba ea fa e0 a8 06 12 8e cc 37 91 d6 9c c8 fd eb 24
+  4d 76 04 8d eb da 76 20 b3 ca 
+  uint8_t padding[32]; // 0x00 all the rest of the file (hash1 + padding + hash2 == 0x60 (96byte)
 
   */
 };
@@ -182,14 +131,27 @@ struct mcfg_item {
   uint16_t padding; // 0x00 0x00
 } __attribute__((packed));
 
-// Constant, some magic identifier?
+struct mcfg_footer_header {
+  uint16_t id; // 0xa1 0x00
+  uint16_t len;
+
+} __attribute__((packed));
+
+struct mcfg_footer_proto {
+  uint8_t id;
+  uint16_t len;
+  uint8_t *data[0];
+} __attribute__((packed));
+
+// *ALMOST* constant, some magic identifier or version?
 struct mcfg_footer_section_0 {
   uint8_t id;    // 0x00
   uint16_t len;  // 2 bytes
   uint16_t data; // 256
 } __attribute__((packed));
 
-// This changes in different files, although structure stays
+// This changes in different files, although structure stays and numbers match inside firmwares
+// Seems like some version number too?
 struct mcfg_footer_section_1 {
   uint8_t id;    // 0x01
   uint16_t len;  // 4 bytes
@@ -211,9 +173,8 @@ struct mcfg_footer_section_3 {
   uint8_t *carrier_config_name[];
 } __attribute__((packed));
 
-// No fucking clue
 /*
-Is this something about the iccids?
+Apparently it's a list of partial ICCIDs to match the SIMs
 https://forums.quectel.com/t/document-sharing-sim-card/16046
 https://blog.karthisoftek.com/a?ID=00900-29badf5d-bd0a-47f7-b3fc-eb900c57e003
 */
@@ -225,57 +186,26 @@ struct mcfg_footer_section_4 {
   uint32_t *iccids[0]; // 898601 898601
 } __attribute__((packed));
 
+// Unknown, some have it, some don't
+struct mcfg_footer_section_5 {
+  uint8_t id;          // 5
+  uint16_t len;        // 4
+  uint8_t *data; 
+} __attribute__((packed));
+
+
 struct mcfg_footer {
   uint32_t len;
-  uint32_t u1;
-  uint16_t u2;
-  uint16_t u3;
-  unsigned char magic[8];
+  uint32_t footer_magic1; // 0x0a 00 00 00
+  uint16_t footer_magic2; // 0xa1 00 
+  uint16_t size_trimmed; // No confindence on this, its always len -0x10
+  unsigned char magic[8]; // MCFG_TRL
 } __attribute__((packed));
 
-/* MOTHERFUCKERS!
-Just like fucking QMI */
-struct mcfg_footer_samp {
-  uint32_t len;
-  uint32_t u1;
-  uint16_t u2;
-  uint16_t u3;
-  uint8_t magic[8];
-  /* MOTHERFUCKERS!
-  Just like fucking QMI */
-
-  // Type Len Value
-
-  // This one seems constant
-  uint8_t foot0;  // 0
-  uint16_t foot1; // 2 len
-  uint16_t foot2; // 256
-
-  uint8_t foot3;  // 1
-  uint16_t foot4; // 4
-  uint32_t foot5; // 33625405
-
-  // This looks like network
-  uint8_t foot6;  // 2
-  uint16_t foot7; // 4 len
-  uint16_t foot8; // 460
-  uint16_t foot9; // 1
-
-  // Carrier name, what gets shown in QMBNCONF?
-  uint8_t foot10;  // 3
-  uint16_t foot11; // 19 <-- len?
-  uint8_t carrier_config_name[19];
-
-  // No fucking clue
-  uint8_t foot12;     // 4
-  uint16_t foot13;    // 10
-  uint8_t foot14;     // 0
-  uint8_t foot15;     // 2?
-  uint32_t foot16[2]; // 898601 898601
-  // And we have some other bytes here at the end
-  // 00 00 50 00 00 00
-} __attribute__((packed));
-
+enum {
+  MCFG_FILETYPE_HW = 0,
+  MCFG_FILETYPE_SW = 1,
+};
 // Base item IDs
 enum {
   MCFG_CARRIER_NAME = 0x00000019,
@@ -287,7 +217,7 @@ enum {
   MCFG_ITEM_TYPE_NV = 0x01,
   MCFG_ITEM_TYPE_NVFILE = 0x02,
   MCFG_ITEM_TYPE_FILE = 0x04,
-  MCFG_ITEM_TYPE_TRAIL = 0xA1,
+  MCFG_ITEM_TYPE_FOOT = 0x0A,
 };
 
 /* Attributes */
