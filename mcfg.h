@@ -172,34 +172,6 @@ struct mcfg_footer_section_allowed_iccids {
   uint32_t iccids[0]; // 898601 898601
 } __attribute__((packed));
 
-// Unknown, some have it, some don't
-struct mcfg_footer_section_5 {
-  uint8_t id;          // 5
-  uint16_t len;        // 4
-  uint8_t data[4]; 
-} __attribute__((packed));
-
-// Unknown, some have it, some don't
-struct mcfg_footer_section_6 {
-  uint8_t id;          // 6
-  uint16_t len;        // ??
-  uint8_t data[0]; 
-} __attribute__((packed));
-
-// Unknown, some have it, some don't
-struct mcfg_footer_section_7 {
-  uint8_t id;          // 7
-  uint16_t len;        // 4
-  uint32_t data; // When we get it, is usually 04 00 00 00, so a uint32
-} __attribute__((packed));
-
-// Unknown, some have it, some don't
-struct mcfg_footer_section_8 {
-  uint8_t id;          // 8
-  uint16_t len;        // 32
-  uint8_t data[32]; 
-} __attribute__((packed));
-
 struct mcfg_footer {
   uint32_t len;
   uint32_t footer_magic1; // 0x0a 00 00 00
@@ -223,6 +195,7 @@ enum {
   MCFG_ITEM_TYPE_NV = 0x01,
   MCFG_ITEM_TYPE_NVFILE = 0x02,
   MCFG_ITEM_TYPE_FILE = 0x04,
+  MCFG_ITEM_TYPE_UNKNOWN = 0x05,
   MCFG_ITEM_TYPE_FOOT = 0x0A,
 };
 
