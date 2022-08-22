@@ -13,19 +13,11 @@
 #define MCFG_FILE_HEADER_MAGIC "MCFG"
 #define MCFG_FILE_FOOTER_MAGIC "MCFG_TRL"
 
-//#define ELF_OFFSET 8192 // shouldnt hardcode this
 #define VERSION_NUM 4995
 #define MAX_NUM_ICCIDS 32
 #define MAX_OBJ_SIZE 16384
+
 /* ELF Headers */
-
-/* 32-bit ELF base types. */
-typedef uint32_t Elf32_Addr;
-typedef uint16_t Elf32_Half;
-typedef uint32_t Elf32_Off;
-typedef int32_t Elf32_Sword;
-typedef uint32_t Elf32_Word;
-
 #define EI_NIDENT 16
 #define ELFMAG "\177ELF"
 
@@ -42,9 +34,9 @@ struct Elf32_Ehdr {
   uint16_t e_type;
   uint16_t e_machine;
   uint32_t e_version;
-  Elf32_Addr e_entry;
-  Elf32_Off e_phoff;
-  Elf32_Off e_shoff;
+  uint32_t e_entry;
+  uint32_t e_phoff;
+  uint32_t e_shoff;
   uint32_t e_flags;
   uint16_t e_ehsize;
   uint16_t e_phentsize;
@@ -54,21 +46,15 @@ struct Elf32_Ehdr {
   uint16_t e_shstrndx;
 };
 
-/* These constants define the permissions on sections in the program
-   header, p_flags. */
-#define PF_R 0x4
-#define PF_W 0x2
-#define PF_X 0x1
-
 struct elf32_phdr {
-  Elf32_Word p_type;
-  Elf32_Off p_offset;
-  Elf32_Addr p_vaddr;
-  Elf32_Addr p_paddr;
-  Elf32_Word p_filesz;
-  Elf32_Word p_memsz;
-  Elf32_Word p_flags;
-  Elf32_Word p_align;
+  uint32_t p_type;
+  uint32_t p_offset;
+  uint32_t p_vaddr;
+  uint32_t p_paddr;
+  uint32_t p_filesz;
+  uint32_t p_memsz;
+  uint32_t p_flags;
+  uint32_t p_align;
 };
 
 struct hash_segment_header {
@@ -140,11 +126,11 @@ struct mcfg_footer_header {
 struct mcfg_footer_proto {
   uint8_t id;
   uint16_t len;
-  uint8_t *data[0];
+  uint8_t data[0];
 } __attribute__((packed));
 
 // *ALMOST* constant, some magic identifier or version?
-struct mcfg_footer_section_0 {
+struct mcfg_footer_section_version1 {
   uint8_t id;    // 0x00
   uint16_t len;  // 2 bytes
   uint16_t data; // 256
@@ -152,7 +138,7 @@ struct mcfg_footer_section_0 {
 
 // This changes in different files, although structure stays and numbers match inside firmwares
 // Seems like some version number too?
-struct mcfg_footer_section_1 {
+struct mcfg_footer_section_version2 {
   uint8_t id;    // 0x01
   uint16_t len;  // 4 bytes
   uint32_t data; // 33625405
@@ -167,7 +153,7 @@ struct mcfg_footer_section_2 {
 } __attribute__((packed));
 
 // Carrier name, as shown in QMBNCFG?
-struct mcfg_footer_section_3 {
+struct mcfg_footer_section_carrier_name {
   uint8_t id;   // 3
   uint16_t len; // 19 <-- len?
   uint8_t *carrier_config_name[];
@@ -178,33 +164,33 @@ Apparently it's a list of partial ICCIDs to match the SIMs
 https://forums.quectel.com/t/document-sharing-sim-card/16046
 https://blog.karthisoftek.com/a?ID=00900-29badf5d-bd0a-47f7-b3fc-eb900c57e003
 */
-struct mcfg_footer_section_4 {
+struct mcfg_footer_section_allowed_iccids {
   uint8_t id;          // 4
   uint16_t len;        // 10
   uint8_t foot14;      // 0
   uint8_t num_iccids;  // 2?
-  uint32_t *iccids[0]; // 898601 898601
+  uint32_t iccids[0]; // 898601 898601
 } __attribute__((packed));
 
 // Unknown, some have it, some don't
 struct mcfg_footer_section_5 {
   uint8_t id;          // 5
   uint16_t len;        // 4
-  uint32_t data; 
+  uint8_t data[4]; 
 } __attribute__((packed));
 
 // Unknown, some have it, some don't
 struct mcfg_footer_section_6 {
   uint8_t id;          // 6
   uint16_t len;        // ??
-  uint8_t *data; 
+  uint8_t data[0]; 
 } __attribute__((packed));
 
 // Unknown, some have it, some don't
 struct mcfg_footer_section_7 {
   uint8_t id;          // 7
   uint16_t len;        // 4
-  uint32_t data; 
+  uint32_t data; // When we get it, is usually 04 00 00 00, so a uint32
 } __attribute__((packed));
 
 // Unknown, some have it, some don't
@@ -242,8 +228,13 @@ enum {
 
 /* Attributes */
 enum {
+  ATTRIB_MODE_FOOTER = 0x00, // Only shows in footer?
   ATTRIB_MODE_09 = 0x09,
+  ATTRIB_MODE_0D = 0x0D,
+  ATTRIB_MODE_19 = 0x19,
   ATTRIB_MODE_29 = 0x29,
+  ATTRIB_MODE_2D = 0x2D,
+  ATTRIB_MODE_39 = 0x39,
   ATTRIB_MODE_2A = 0x2A,
 };
 
@@ -253,4 +244,33 @@ enum {
   EFS_FILECONTENTS = 0x02,
 };
 
+/* Known and unknown footer sections */
+enum {
+  MCFG_FOOTER_SECTION_VERSION_1 = 0x00,
+  MCFG_FOOTER_SECTION_VERSION_2 = 0x01,
+  MCFG_FOOTER_SECTION_APPLICABLE_MCC_MNC = 0x02,
+  MCFG_FOOTER_SECTION_PROFILE_NAME = 0x03,
+  MCFG_FOOTER_SECTION_ALLOWED_ICCIDS = 0x04,
+};
+/* NOTE:
+
+Missing Sections:
+NV ITEMS:
+  Type 00
+  Type 05
+
+
+FOOTER:
+  At least up to section 8, there are shared things among some of the sample files
+  It looks like sections >10 are custom fields of some sorts that only certain carriers
+  have. We'll store them just in case
+  Section #5: When it appears, it's always 4xuint8_t
+  Section #6: Variable size, but shared accross some of the profiles with different names in same country. Could be related to MVNOs?
+  Section #7: 4 Bytes
+  Section 8: 32 Bytes
+  Section #9: Typically 0 bytes long when it shows up?
+  Section #10
+  Section #37: Only SMARTFREN has it
+  Section #78 : Only Telefonica Spain has it. 
+*/
 #endif

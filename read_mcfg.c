@@ -320,28 +320,28 @@ int dump_contents() {
   fprintf(stdout, "Checking in: %s, size %i bytes\n", footer->magic,
           footer->len);
   current_file_offset += sizeof(struct mcfg_footer);
-  struct mcfg_footer_section_0 *sec0 =
-      (struct mcfg_footer_section_0 *)(file_buff + current_file_offset);
+  struct mcfg_footer_section_version1 *sec0 =
+      (struct mcfg_footer_section_version1 *)(file_buff + current_file_offset);
   fprintf(stdout, "Footer section 0 id %i of size %i, data %i\n", sec0->id,
           sec0->len, sec0->data);
-  current_file_offset += sizeof(struct mcfg_footer_section_0);
-  struct mcfg_footer_section_1 *sec1 =
-      (struct mcfg_footer_section_1 *)(file_buff + current_file_offset);
+  current_file_offset += sizeof(struct mcfg_footer_section_version1);
+  struct mcfg_footer_section_version2 *sec1 =
+      (struct mcfg_footer_section_version2 *)(file_buff + current_file_offset);
   fprintf(stdout, "Footer section 1 id %i of size %i, data %i\n", sec1->id,
           sec1->len, sec1->data);
-  current_file_offset += sizeof(struct mcfg_footer_section_1);
+  current_file_offset += sizeof(struct mcfg_footer_section_version2);
   struct mcfg_footer_section_2 *sec2 =
       (struct mcfg_footer_section_2 *)(file_buff + current_file_offset);
   fprintf(stdout, "Footer section 2 id %i of size %i, MCC-MNC %i-%i\n",
           sec2->id, sec2->len, sec2->mcc, sec2->mnc);
   current_file_offset += sizeof(struct mcfg_footer_section_2);
-  struct mcfg_footer_section_3 *sec3 =
-      (struct mcfg_footer_section_3 *)(file_buff + current_file_offset);
+  struct mcfg_footer_section_carrier_name *sec3 =
+      (struct mcfg_footer_section_carrier_name *)(file_buff + current_file_offset);
   fprintf(stdout, "Footer section 3 id %i of size %i, name %s\n", sec3->id,
           sec3->len, (char *)sec3->carrier_config_name);
-  current_file_offset += sizeof(struct mcfg_footer_section_3) + sec3->len;
-  struct mcfg_footer_section_4 *sec4 =
-      (struct mcfg_footer_section_4 *)(file_buff + current_file_offset);
+  current_file_offset += sizeof(struct mcfg_footer_section_carrier_name) + sec3->len;
+  struct mcfg_footer_section_allowed_iccids *sec4 =
+      (struct mcfg_footer_section_allowed_iccids *)(file_buff + current_file_offset);
   fprintf(stdout, "Footer section 4 id %i of size %i\n", sec4->id,
           sec4->len);
 

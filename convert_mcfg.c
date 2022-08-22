@@ -153,20 +153,20 @@ int make_mcfg_footer_proto(uint8_t *buffer, uint8_t do_footer_section_magic1,
                            uint8_t used_iccids) {
   int allocsize = 0;
   if (do_footer_section_magic1)
-    allocsize += sizeof(struct mcfg_footer_section_0);
+    allocsize += sizeof(struct mcfg_footer_section_version1);
 
   if (do_footer_section_magic2)
-    allocsize += sizeof(struct mcfg_footer_section_1);
+    allocsize += sizeof(struct mcfg_footer_section_version2);
 
   if (do_use_specific_mcc_mnc)
     allocsize += sizeof(struct mcfg_footer_section_2);
 
   if (do_use_specific_carrier_name)
-    allocsize += sizeof(struct mcfg_footer_section_3);
+    allocsize += sizeof(struct mcfg_footer_section_carrier_name);
 
   if (do_whitelist_specific_iccids)
     allocsize +=
-        sizeof(struct mcfg_footer_section_4) + (used_iccids * sizeof(uint32_t));
+        sizeof(struct mcfg_footer_section_allowed_iccids) + (used_iccids * sizeof(uint32_t));
 
   buffer = malloc(allocsize);
 
@@ -344,8 +344,8 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
   uint32_t padded_bytes = 0;
   if (!debug)
     fprintf(stdout, "\nAnalyzing footer with size of %i bytes\n", sz);
-  if (sz < (sizeof(struct mcfg_item) + sizeof(struct mcfg_footer_section_0) +
-            sizeof(struct mcfg_footer_section_1))) {
+  if (sz < (sizeof(struct mcfg_item) + sizeof(struct mcfg_footer_section_version1) +
+            sizeof(struct mcfg_footer_section_version2))) {
     fprintf(stderr, "Error: Footer is too short?\n");
     return -EINVAL;
   }
@@ -382,11 +382,11 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
   uint32_t curr_obj_offset = sizeof(struct mcfg_footer);
   uint32_t max_obj_size = footer_in->len - padded_bytes - sizeof(uint32_t);
   // Pointers to reuse later
-  struct mcfg_footer_section_0 *sec0;
-  struct mcfg_footer_section_1 *sec1;
+  struct mcfg_footer_section_version1 *sec0;
+  struct mcfg_footer_section_version2 *sec1;
   struct mcfg_footer_section_2 *sec2;
-  struct mcfg_footer_section_3 *sec3;
-  struct mcfg_footer_section_4 *sec4;
+  struct mcfg_footer_section_carrier_name *sec3;
+  struct mcfg_footer_section_allowed_iccids *sec4;
   struct mcfg_footer_section_5 *sec5;
   struct mcfg_footer_section_6 *sec6;
   struct mcfg_footer_section_7 *sec7;
@@ -396,46 +396,38 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
     struct mcfg_footer_proto *proto =
         (struct mcfg_footer_proto *)(footer + curr_obj_offset);
     
-    fprintf(stdout, "Section %i with size %i bytes\n", proto->id, proto->len);
+    fprintf(stdout, "Section #%i: %i bytes\n", proto->id, proto->len);
     switch (proto->id) {
-    case 0: // Fixed size, 2 bytes, CONSTANT
-      sec0 = (struct mcfg_footer_section_0 *)(footer + curr_obj_offset);
+    case MCFG_FOOTER_SECTION_VERSION_1: // Fixed size, 2 bytes, CONSTANT
+      sec0 = (struct mcfg_footer_section_version1 *)(footer + curr_obj_offset);
       fprintf(stdout, "Version1 %i\n", sec0->data);
       break;
-    case 1: // Fixed size, 4 bytes
-      sec1 = (struct mcfg_footer_section_1 *)(footer + curr_obj_offset);
+    case MCFG_FOOTER_SECTION_VERSION_2: // Fixed size, 4 bytes
+      sec1 = (struct mcfg_footer_section_version2 *)(footer + curr_obj_offset);
       fprintf(stdout, "Version2 %i\n", sec1->data);
       break;
-    case 2: // MCC+MNC
+    case MCFG_FOOTER_SECTION_APPLICABLE_MCC_MNC: // MCC+MNC
       sec2 = (struct mcfg_footer_section_2 *)(footer + curr_obj_offset);
       fprintf(stdout, "MCC %i-%i\n", sec2->mcc, sec2->mnc);
       break;
-    case 3: // Carrier name
-      sec3 = (struct mcfg_footer_section_3 *)(footer + curr_obj_offset);
+    case MCFG_FOOTER_SECTION_PROFILE_NAME: // Carrier name
+      sec3 = (struct mcfg_footer_section_carrier_name *)(footer + curr_obj_offset);
       fprintf(stdout, "Carrier %s\n", (char*)sec3->carrier_config_name);
       break;
-    case 4: // ICCIDs
-      sec4 = (struct mcfg_footer_section_4 *)(footer + curr_obj_offset);
-      fprintf(stdout, "ICC ID 0: %i\n", sec4->iccids[0]);
+    case MCFG_FOOTER_SECTION_ALLOWED_ICCIDS: // ICCIDs
+      sec4 = (struct mcfg_footer_section_allowed_iccids *)(footer + curr_obj_offset);
+      for (int tmp = 0; tmp < sec4->num_iccids; tmp++) {
+        fprintf(stdout, " - Allowed ICCID %i: %i...\n", tmp, sec4->iccids[tmp]);
+        
+      }
       break;
-    case 5: // Fixed size, 4 byte
-      sec5 = (struct mcfg_footer_section_5 *)(footer + curr_obj_offset);
-      fprintf(stdout, "Sec5 %i\n", sec5->data);
-      break;
-    case 6: // Variable size
-      sec6 = (struct mcfg_footer_section_6 *)(footer + curr_obj_offset);
-      fprintf(stdout, "SEC6 %i\n", sec6->data);
-      break;
-    case 7: // Fixed size, 4 byte
-      sec7 = (struct mcfg_footer_section_7 *)(footer + curr_obj_offset);
-      fprintf(stdout, "Sec7 %i\n", sec7->data);
-      break;
-    case 8: // Fixed size, 32 byte
-      sec8 = (struct mcfg_footer_section_8 *)(footer + curr_obj_offset);
-      fprintf(stdout, "Sec8 %s\n", sec8->data);
-      break;
+
     default:
-      fprintf(stderr, "WARNING: Unknown section %i in the footer at offset %i\n", proto->id, curr_obj_offset);
+      fprintf(stdout, "WARNING: %s: Unknown section %i of size %i in the footer at offset %i\nStart dump\n", (char*)sec3->carrier_config_name, proto->id, proto->len, curr_obj_offset);
+      for (int p = 0; p < proto->len; p++) {
+        fprintf(stdout, "%.2x ", proto->data[p]);
+      }
+      fprintf(stdout, "\nEnd dump\n");
       break;
     }
 
@@ -552,6 +544,7 @@ int process_nv_configuration_data() {
       fprintf(stderr,
               "Don't know how to handle NV data type %i (%.2x), sorry\n",
               item->type, item->type);
+          
       return -EINVAL;
       // We should quit here!
       break;
@@ -614,14 +607,14 @@ int main(int argc, char *argv[]) {
   }
 
   if (check_input_file() < 0) {
-    fprintf(stderr, "FATAL: Input file is not compatible with this tool :(\n");
+    fprintf(stderr, "FATAL: Input file %s is not compatible with this tool :(\n", input_file);
     return -EINVAL;
   }
 
   if (process_nv_configuration_data() < 0) {
     fprintf(
         stderr,
-        "FATAL: Error processing configuration data from the input file(\n");
+        "FATAL: Error processing configuration data from the input file\n");
     return -EINVAL;
   }
 
