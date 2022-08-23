@@ -54,7 +54,6 @@ void print_help() {
 }
 
 int make_elf_header(uint8_t *buffer) {
-  buffer = malloc(sizeof(struct Elf32_Ehdr));
   memset(buffer, 0, sizeof(struct Elf32_Ehdr));
   elfbuf = (struct Elf32_Ehdr *)buffer;
   memcpy(elfbuf->e_ident, ELFMAG, 4);
@@ -96,7 +95,6 @@ int make_default_program_headers(uint8_t *buffer) {
   int totalsize = 3 * sizeof(struct elf32_phdr);
   fprintf(stdout, "Program Headers: %ld bytes each, %i bytes total\n",
           sizeof(struct elf32_phdr), totalsize);
-  buffer = malloc(totalsize);
   memset(buffer, 0, totalsize);
   ph0 = (struct elf32_phdr *)buffer;
   ph0->p_filesz = 148;      // REDO THIS
@@ -236,6 +234,7 @@ int check_input_file() {
     return -EINVAL;
   }
   /* Program headers */
+  fprintf(stdout, "ELF PH0 Offset: 0x%.4x %i\n", elf_hdr_in->e_phoff, elf_hdr_in->e_phoff);
   ph0_in =
       (struct elf32_phdr *)(file_in_buff + (elf_hdr_in->e_phoff +
                                             0 * (sizeof(struct elf32_phdr))));
@@ -281,6 +280,16 @@ int check_input_file() {
   }
 
   fprintf(stdout, "Found it!\n");
+  fprintf(stdout, "   - Format version: %i\n", mcfg_head_in->format_version);
+  fprintf(stdout, "   - Configuration type: %s\n", mcfg_head_in->config_type < 1 ? "HW Config" : "SW Config");
+  fprintf(stdout, "   - Number of items in config: %i\n", mcfg_head_in->no_of_items);
+  fprintf(stdout, "   - Padd %.2x %.2x %.2x %.2x\n", mcfg_head_in->padding[0],mcfg_head_in->padding[1],mcfg_head_in->padding[2], mcfg_head_in->padding[3]);
+  struct mcfg_sub_version_data *headsub = (struct mcfg_sub_version_data*) (file_in_buff + ph2_in->p_offset + sizeof(struct mcfg_file_header));
+  fprintf(stdout, "   - Sub-header data:\n");
+  fprintf(stdout, "     - Version: %x\n", headsub->version);
+  fprintf(stdout, "     - u1: %x\n", headsub->carrier);
+  fprintf(stdout, "     - u2: %.8x\n", headsub->unknown2);
+
   if (mcfg_head_in->config_type != MCFG_FILETYPE_SW) {
     fprintf(stderr,
             "Error: Sorry, this program does not support HW filetypes\n");
@@ -488,7 +497,6 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
 
   } while (!done);
 
-  fprintf(stdout, "%s finished\n", __func__);
   return 0;
 }
 
@@ -645,6 +653,17 @@ int process_nv_configuration_data() {
   if (!debug) {
     fprintf(stdout, "\n");
   }
+
+  /* NOW WE WRITE */
+  file_out_buff = malloc(file_in_sz);
+  make_elf_header(file_out_buff);
+  int totalsize = 3 * sizeof(struct elf32_phdr);
+  fprintf(stdout, "Building Program Headers: %ld bytes each, %i bytes total\n",
+          sizeof(struct elf32_phdr), totalsize);
+  make_default_program_headers((file_out_buff+sizeof(struct Elf32_Ehdr)));
+
+
+
   return 0;
 }
 
@@ -707,7 +726,7 @@ int main(int argc, char *argv[]) {
     return -EINVAL;
   }
 
-  fwrite(file_in_buff, file_in_sz, 1, file_out);
+  fwrite(file_out_buff, file_in_sz, 1, file_out);
   free(file_in_buff);
   fclose(file_out);
   return 0;

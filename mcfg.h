@@ -22,6 +22,11 @@
 #define EI_NIDENT 16
 #define ELFMAG "\177ELF"
 
+/* Hardcoded stuff for outpur files */
+#define PH_OFFSET 0x0034
+#define HASH_SECTION_OFFSET 0x1000
+#define MCFG_DATA_OFFSET 0x2000
+
 struct item_blob {
   uint32_t id;
   uint8_t type;
@@ -93,10 +98,8 @@ struct mcfg_file_header {
 
 struct mcfg_sub_version_data { // unsure
   uint16_t version;            // 0x83 0x13
-  uint16_t unknown1;           // 0x04 0x00
-  uint16_t unknown2;           // 0x01 0x00 || 0x03 0x00
-  uint8_t unknown3;            // 0xe0
-  uint8_t unknown4;            // 0x02
+  uint16_t carrier;           // 0x04 0x00
+  uint32_t unknown2;           // 0x01 0x00 || 0x03 0x00
 } __attribute__((packed));
 
 struct mcfg_nvitem {

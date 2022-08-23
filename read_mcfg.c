@@ -172,8 +172,7 @@ int check_file_header() {
         (struct mcfg_sub_version_data *)(file_buff + ELF_OFFSET +
                                          sizeof(struct mcfg_file_header));
     if (version->version == VERSION_NUM) {
-      fprintf(stdout, "Version is %.4x |%.4x |%.2x |%.2x\n", version->unknown1,
-              version->unknown2, version->unknown3, version->unknown4);
+
       current_file_offset = ELF_OFFSET + sizeof(struct mcfg_file_header) +
                             sizeof(struct mcfg_sub_version_data);
     } else {
