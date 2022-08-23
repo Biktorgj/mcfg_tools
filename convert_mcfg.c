@@ -34,6 +34,16 @@ struct hash_segment_header *hash;
 uint8_t *file_out_buff;
 uint32_t file_out_sz;
 
+struct mcfg_file_meta {
+  uint32_t elf_offset;
+  uint32_t ph0_offset;
+  uint32_t ph1_offset;
+  uint32_t ph2_offset;
+  uint32_t hash_offset;
+  uint32_t mcfg_start_offset;
+  uint32_t mcfg_footer_offset;
+};
+
 void print_help() {
   fprintf(stdout, "Usage:\n");
   fprintf(stdout, "  make_mcfg -i INPUT_FILE -o OUTPUT_FILE\n");
@@ -165,8 +175,8 @@ int make_mcfg_footer_proto(uint8_t *buffer, uint8_t do_footer_section_magic1,
     allocsize += sizeof(struct mcfg_footer_section_carrier_name);
 
   if (do_whitelist_specific_iccids)
-    allocsize +=
-        sizeof(struct mcfg_footer_section_allowed_iccids) + (used_iccids * sizeof(uint32_t));
+    allocsize += sizeof(struct mcfg_footer_section_allowed_iccids) +
+                 (used_iccids * sizeof(uint32_t));
 
   buffer = malloc(allocsize);
 
@@ -202,9 +212,10 @@ int prepare_output_file(char *output_file) {
  */
 int check_input_file() {
   /*
-  We know MCFG must start at least at 0x2000 bytes without signature, or 0x3000
-  with it So for now it's enough to check for the minimum size and do more
-  checks later on */
+   * We know MCFG must start at least at 0x2000 bytes without signature, or 0x3000
+   * with it So for now it's enough to check for the minimum size and do more
+   * checks later on 
+  */
   if (file_in_sz < 0x2000) {
     fprintf(stderr, "Error: File is to small!\n");
     return -EINVAL;
@@ -339,18 +350,46 @@ So we can pick the last one as a uint32, and the sz from the header and find out
 the amount of padding? or as a checksum of sorts?
 
 */
+
+char *get_section_name(uint8_t section_id) {
+  switch (section_id) {
+  case MCFG_FOOTER_SECTION_VERSION_1:
+    return "Version field";
+  case MCFG_FOOTER_SECTION_VERSION_2:
+    return "Second version field";
+  case MCFG_FOOTER_SECTION_APPLICABLE_MCC_MNC:
+    return "Carrier Network code";
+  case MCFG_FOOTER_SECTION_PROFILE_NAME:
+    return "Carrier Profile name";
+  case MCFG_FOOTER_SECTION_ALLOWED_ICCIDS:
+    return "Allowed SIM ICC IDs for this profile";
+  }
+
+  return "Unknown section";
+}
+
+char *get_nvitem_name(uint32_t id) {
+  for (int i = 0; i < (sizeof(nvitem_names) / sizeof(nvitem_names[0])); i++) {
+    if (id == nvitem_names[i].id) {
+      return (char*)nvitem_names[i].name;
+    }
+  }
+
+  return "Unknwon";
+}
 int analyze_footer(uint8_t *footer, uint16_t sz) {
   int done = 0;
   uint32_t padded_bytes = 0;
   if (!debug)
     fprintf(stdout, "\nAnalyzing footer with size of %i bytes\n", sz);
-  if (sz < (sizeof(struct mcfg_item) + sizeof(struct mcfg_footer_section_version1) +
-            sizeof(struct mcfg_footer_section_version2))) {
+  if (sz <
+      (sizeof(struct mcfg_item) + sizeof(struct mcfg_footer_section_version1) +
+       sizeof(struct mcfg_footer_section_version2))) {
     fprintf(stderr, "Error: Footer is too short?\n");
     return -EINVAL;
   }
   /* Dump the footer */
-  if (!debug) {
+  if (debug) {
     fprintf(stdout, "Footer: hex dump\n");
     int cnt = 0;
     for (int i = 0; i < sz; i++) {
@@ -374,11 +413,11 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
     fprintf(stderr, "Error: One of the magic numbers doesn't match\n");
     return -EINVAL;
   }
-  fprintf(stdout, "Size %i, Reported size %i -> %i\n", sz, footer_in->len,
+  fprintf(stdout, "Size:\n - %i bytes\n - Reported: %i bytes\n - Trimmed: %ibytes\n", sz, footer_in->len,
           footer_in->size_trimmed);
   uint32_t *end_marker = (uint32_t *)(footer + sz - 4);
   padded_bytes = *end_marker - footer_in->len;
-  fprintf(stdout, "Padded bytes: %i %i\n", *end_marker, padded_bytes);
+  fprintf(stdout, " - Padding at the end: %i bytes \n", padded_bytes);
   uint32_t curr_obj_offset = sizeof(struct mcfg_footer);
   uint32_t max_obj_size = footer_in->len - padded_bytes - sizeof(uint32_t);
   // Pointers to reuse later
@@ -387,78 +426,90 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
   struct mcfg_footer_section_2 *sec2;
   struct mcfg_footer_section_carrier_name *sec3;
   struct mcfg_footer_section_allowed_iccids *sec4;
-  struct mcfg_footer_section_5 *sec5;
-  struct mcfg_footer_section_6 *sec6;
-  struct mcfg_footer_section_7 *sec7;
-  struct mcfg_footer_section_8 *sec8;
   /* Now find each section */
+  fprintf(stdout, "Footer sections:\n");
   do {
     struct mcfg_footer_proto *proto =
         (struct mcfg_footer_proto *)(footer + curr_obj_offset);
-    
-    fprintf(stdout, "Section #%i: %i bytes\n", proto->id, proto->len);
+
+    fprintf(stdout, " - %s (#%i): %i bytes\n", get_section_name(proto->id), proto->id,
+            proto->len);
     switch (proto->id) {
     case MCFG_FOOTER_SECTION_VERSION_1: // Fixed size, 2 bytes, CONSTANT
       sec0 = (struct mcfg_footer_section_version1 *)(footer + curr_obj_offset);
-      fprintf(stdout, "Version1 %i\n", sec0->data);
+      fprintf(stdout, "   - Version: %i\n", sec0->data);
       break;
     case MCFG_FOOTER_SECTION_VERSION_2: // Fixed size, 4 bytes
       sec1 = (struct mcfg_footer_section_version2 *)(footer + curr_obj_offset);
-      fprintf(stdout, "Version2 %i\n", sec1->data);
+      fprintf(stdout, "   - Version: %i\n", sec1->data);
       break;
     case MCFG_FOOTER_SECTION_APPLICABLE_MCC_MNC: // MCC+MNC
       sec2 = (struct mcfg_footer_section_2 *)(footer + curr_obj_offset);
-      fprintf(stdout, "MCC %i-%i\n", sec2->mcc, sec2->mnc);
+      fprintf(stdout, "   - MCC-MNC %i-%i\n", sec2->mcc, sec2->mnc);
       break;
     case MCFG_FOOTER_SECTION_PROFILE_NAME: // Carrier name
-      sec3 = (struct mcfg_footer_section_carrier_name *)(footer + curr_obj_offset);
-      fprintf(stdout, "Carrier %s\n", (char*)sec3->carrier_config_name);
+      sec3 =
+          (struct mcfg_footer_section_carrier_name *)(footer + curr_obj_offset);
+      fprintf(stdout, "   - Profile name: %s\n", (char *)sec3->carrier_config_name);
       break;
     case MCFG_FOOTER_SECTION_ALLOWED_ICCIDS: // ICCIDs
-      sec4 = (struct mcfg_footer_section_allowed_iccids *)(footer + curr_obj_offset);
+      sec4 = (struct mcfg_footer_section_allowed_iccids *)(footer +
+                                                           curr_obj_offset);
       for (int tmp = 0; tmp < sec4->num_iccids; tmp++) {
-        fprintf(stdout, " - Allowed ICCID %i: %i...\n", tmp, sec4->iccids[tmp]);
-        
+        fprintf(stdout, "   - Allowed ICC ID #%i: %i...\n", tmp,
+                sec4->iccids[tmp]);
       }
       break;
 
     default:
-      fprintf(stdout, "WARNING: %s: Unknown section %i of size %i in the footer at offset %i\nStart dump\n", (char*)sec3->carrier_config_name, proto->id, proto->len, curr_obj_offset);
-      for (int p = 0; p < proto->len; p++) {
-        fprintf(stdout, "%.2x ", proto->data[p]);
+      fprintf(stdout,
+              "   - WARNING: %s: Unknown section %i of size %i in the footer at "
+              "offset %i\n",
+              (char *)sec3->carrier_config_name, proto->id, proto->len,
+              curr_obj_offset);
+      if (debug) {
+        fprintf(stdout, "Section dump:\n");
+        for (int p = 0; p < proto->len; p++) {
+          fprintf(stdout, "%.2x ", proto->data[p]);
+        }
+        fprintf(stdout, "\nEnd dump\n");
       }
-      fprintf(stdout, "\nEnd dump\n");
       break;
     }
 
-    curr_obj_offset+= sizeof(struct mcfg_footer_proto) + proto->len;
+    curr_obj_offset += sizeof(struct mcfg_footer_proto) + proto->len;
+    if (proto->len == 0) {
+      curr_obj_offset++;
+    }
     proto = NULL;
     if (curr_obj_offset >= max_obj_size) {
       done = 1;
     }
- 
+
   } while (!done);
 
+  fprintf(stdout, "%s finished\n", __func__);
   return 0;
 }
 
 int process_nv_configuration_data() {
   fprintf(stdout, "%s: start\n", __func__);
   int num_items = mcfg_head_in->no_of_items;
-  struct nv_item nv_items[num_items];
+  struct item_blob nv_items[num_items];
 
   uint16_t current_offset = ph2_in->p_offset + sizeof(struct mcfg_file_header) +
                             sizeof(struct mcfg_sub_version_data);
   if (!debug) {
-    fprintf(stdout, "Processing items... ");
+    fprintf(stdout, "Processing items...\n");
   }
+  uint8_t *tmpoffset;
   for (int i = 0; i < num_items; i++) {
     struct mcfg_item *item =
         (struct mcfg_item *)(file_in_buff + current_offset);
     struct mcfg_nvitem *nvitem;
     struct mcfg_nvfile_part *file_section;
     if (!debug) {
-      fprintf(stdout, "%i ", i);
+      fprintf(stdout, " - %i: #%i (%s)\n", i, item->id, get_nvitem_name(item->id));
     }
     nv_items[i].offset = current_offset;
     nv_items[i].type = item->type;
@@ -466,6 +517,7 @@ int process_nv_configuration_data() {
     current_offset += sizeof(struct mcfg_item);
     switch (item->type) {
     case MCFG_ITEM_TYPE_NV:
+    case MCFG_ITEM_TYPE_UNKNOWN:
       if (debug)
         fprintf(stdout, "Item %i at offset %i: NV data\n", i, current_offset);
       nvitem = (struct mcfg_nvitem *)(file_in_buff + current_offset);
@@ -486,7 +538,6 @@ int process_nv_configuration_data() {
         }
         fprintf(stdout, "\nAs str: %s\n", nv_items[i].blob);
       }
-      // Do stuff
       break;
     case MCFG_ITEM_TYPE_NVFILE:
     case MCFG_ITEM_TYPE_FILE:
@@ -531,7 +582,6 @@ int process_nv_configuration_data() {
       }
       break;
     case MCFG_ITEM_TYPE_FOOT:
-      /* TODO: FILL THE FOOTER */
       if (debug)
         fprintf(stdout, "Footer at %i bytes, size of %i bytes\n",
                 current_offset, file_in_sz - current_offset);
@@ -539,14 +589,54 @@ int process_nv_configuration_data() {
       analyze_footer(
           (file_in_buff + current_offset - sizeof(struct mcfg_item)),
           (file_in_sz - (current_offset - sizeof(struct mcfg_item))));
+        
+        if (i < (num_items-1))
+          fprintf(stderr, "WARNING: There's more stuff beyond the footer. Something is wrong... %i/%i\n", i, num_items);
+
       break;
     default:
+      /* We need to break here. There are some types of items who don't follow
+       * the same pattern. They sometimes include complete files, secret keys,
+       * conditional rules for roaming etc.
+       * Instead of holding them in EFS files (or either I'm missing a typedef
+       * for some other filetype), they appear as a different item type for some
+       * reason 
+       * Will try to figure it out in the future, but for now, I'll just
+       * break here since I don't know how to find the correct offsets for 
+       * these item types
+      */
       fprintf(stderr,
-              "Don't know how to handle NV data type %i (%.2x), sorry\n",
+              "Don't know how to handle NV data type %i (0x%.2x), bailing out, "
+              "sorry\n",
               item->type, item->type);
-          
+      for (int dbf = -8; dbf < 8; dbf++) {
+        if (dbf == 0) {
+          fprintf(stderr, " ... ");
+        }
+        tmpoffset = (file_in_buff + nv_items[i].offset + dbf);
+        fprintf(stderr, "%.2x ", *tmpoffset);
+      }
+      fprintf(stderr, "\n");
+      fprintf(stderr, "String::: \n%s\nEOF\n", (file_in_buff+nv_items[i].offset));
+      /*      fprintf(stdout, "Item %i at offset %i: \n", i, current_offset);
+          nvitem = (struct mcfg_nvitem *)(file_in_buff + current_offset);
+          fprintf(stdout, "Payload size: %i byte\n", nvitem->payload_size);
+          current_offset += sizeof(struct mcfg_nvitem) + nvitem->payload_size;
+          nv_items[i].size = current_offset - nv_items[i].offset;
+          memcpy(nv_items[i].blob, (file_in_buff + nv_items[i].offset),
+                 nv_items[i].size);
+          nvitem = NULL;
+            int cnt = 0;
+            for (int k = 0; k < nv_items[i].size; k++) {
+              fprintf(stdout, "%.2x ", nv_items[i].blob[k]);
+              cnt++;
+              if (cnt > 32) {
+                fprintf(stdout, "\n");
+                cnt = 0;
+              }
+          }
+            fprintf(stdout, "\nAs str: %s\n", nv_items[i].blob);*/
       return -EINVAL;
-      // We should quit here!
       break;
     }
 
@@ -557,8 +647,6 @@ int process_nv_configuration_data() {
   }
   return 0;
 }
-
-int process_mcfg_footer_data() { return 0; }
 
 int main(int argc, char *argv[]) {
   char *input_file;
@@ -595,7 +683,7 @@ int main(int argc, char *argv[]) {
       print_help();
       return 0;
     }
-
+  fprintf(stdout, "Input file: %s\n", input_file);
   if (get_input_file(input_file) < 0) {
     fprintf(stderr, "Error opening input file %s!\n", input_file);
     return -EINVAL;
@@ -607,14 +695,15 @@ int main(int argc, char *argv[]) {
   }
 
   if (check_input_file() < 0) {
-    fprintf(stderr, "FATAL: Input file %s is not compatible with this tool :(\n", input_file);
+    fprintf(stderr,
+            "FATAL: Input file %s is not compatible with this tool :(\n",
+            input_file);
     return -EINVAL;
   }
 
   if (process_nv_configuration_data() < 0) {
-    fprintf(
-        stderr,
-        "FATAL: Error processing configuration data from the input file\n");
+    fprintf(stderr,
+            "FATAL: Error processing configuration data from the input file\n");
     return -EINVAL;
   }
 
