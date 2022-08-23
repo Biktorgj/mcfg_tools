@@ -283,12 +283,12 @@ int check_input_file() {
   fprintf(stdout, "   - Format version: %i\n", mcfg_head_in->format_version);
   fprintf(stdout, "   - Configuration type: %s\n", mcfg_head_in->config_type < 1 ? "HW Config" : "SW Config");
   fprintf(stdout, "   - Number of items in config: %i\n", mcfg_head_in->no_of_items);
-  fprintf(stdout, "   - Padd %.2x %.2x %.2x %.2x\n", mcfg_head_in->padding[0],mcfg_head_in->padding[1],mcfg_head_in->padding[2], mcfg_head_in->padding[3]);
+  fprintf(stdout, "   - Carrier ID %i \n", mcfg_head_in->carrier_id);
   struct mcfg_sub_version_data *headsub = (struct mcfg_sub_version_data*) (file_in_buff + ph2_in->p_offset + sizeof(struct mcfg_file_header));
   fprintf(stdout, "   - Sub-header data:\n");
-  fprintf(stdout, "     - Version: %x\n", headsub->version);
-  fprintf(stdout, "     - u1: %x\n", headsub->carrier);
-  fprintf(stdout, "     - u2: %.8x\n", headsub->unknown2);
+  fprintf(stdout, "     - Magic: %x\n", headsub->magic);
+  fprintf(stdout, "     - Size: %i\n", headsub->len);
+  fprintf(stdout, "     - Data: %.8x\n", headsub->data);
 
   if (mcfg_head_in->config_type != MCFG_FILETYPE_SW) {
     fprintf(stderr,

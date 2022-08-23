@@ -93,13 +93,18 @@ struct mcfg_file_header {
   uint16_t format_version; // 0x02 0x00
   uint16_t config_type;    // MCFG_HW is 0, MCFG_SW is 1
   uint32_t no_of_items;    // Number of items in the file
-  uint8_t padding[4];      // 0x00
+  uint16_t carrier_id;      // Each carrier seems to have a unique ID? either uin16_t + 2xbyte padding or a uint32_t and havent found a really big num
+  uint16_t padding;      // 0x00 0x00
 } __attribute__((packed));
 
+/*
+ * Is this another TLV?
+ *   Len is always 4...
+ */
 struct mcfg_sub_version_data { // unsure
-  uint16_t version;            // 0x83 0x13
-  uint16_t carrier;           // 0x04 0x00
-  uint32_t unknown2;           // 0x01 0x00 || 0x03 0x00
+  uint16_t magic;            // 0x83 0x13, another magic number
+  uint16_t len;           // 0x04 0x00
+  uint32_t data;           // 0x01 0x00 || 0x03 0x00
 } __attribute__((packed));
 
 struct mcfg_nvitem {

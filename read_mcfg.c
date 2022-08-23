@@ -171,7 +171,7 @@ int check_file_header() {
     struct mcfg_sub_version_data *version =
         (struct mcfg_sub_version_data *)(file_buff + ELF_OFFSET +
                                          sizeof(struct mcfg_file_header));
-    if (version->version == VERSION_NUM) {
+    if (version->magic == VERSION_NUM) {
 
       current_file_offset = ELF_OFFSET + sizeof(struct mcfg_file_header) +
                             sizeof(struct mcfg_sub_version_data);
