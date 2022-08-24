@@ -23,7 +23,8 @@ struct elf32_phdr *ph1_in;
 struct elf32_phdr *ph2_in;
 struct hash_segment_header *hash_in;
 struct mcfg_file_header *mcfg_head_in;
-
+struct mcfg_sub_version_data *mcfg_sub_in;
+struct mcfg_footer_section footer_items[MAX_FOOTER_SECTIONS];
 // Output file
 FILE *file_out;
 struct Elf32_Ehdr *elfbuf;
@@ -31,6 +32,10 @@ struct elf32_phdr *ph0;
 struct elf32_phdr *ph1;
 struct elf32_phdr *ph2;
 struct hash_segment_header *hash;
+struct mcfg_file_header *mcfg_head_out;
+struct mcfg_sub_version_data *mcfg_sub_out;
+struct mcfg_footer *footer_out;
+
 uint8_t *file_out_buff;
 uint32_t file_out_sz;
 
@@ -53,9 +58,8 @@ void print_help() {
                   "\t-d: Print hex dumps\n");
 }
 
-int make_elf_header(uint8_t *buffer) {
-  memset(buffer, 0, sizeof(struct Elf32_Ehdr));
-  elfbuf = (struct Elf32_Ehdr *)buffer;
+int make_elf_header(uint32_t offset) {
+  elfbuf = (struct Elf32_Ehdr *)file_out_buff+offset;
   memcpy(elfbuf->e_ident, ELFMAG, 4);
   elfbuf->e_type = 2;
   elfbuf->e_machine = 0;
@@ -74,7 +78,7 @@ int make_elf_header(uint8_t *buffer) {
     fprintf(stdout, "ELF Header hex dump:\n");
     int count = 0;
     for (int i = 0; i < sizeof(struct Elf32_Ehdr); i++) {
-      fprintf(stdout, "%.2x ", file_in_buff[i]);
+      fprintf(stdout, "%.2x ", file_out_buff[i]);
       count++;
       if (count > 15) {
         fprintf(stdout, "\n");
@@ -89,19 +93,18 @@ int make_elf_header(uint8_t *buffer) {
 /*
  * MCFG_SW files use 3 program headers
  */
-int make_default_program_headers(uint8_t *buffer) {
+int make_default_program_headers(uint32_t offset) {
 
   // First header
   int totalsize = 3 * sizeof(struct elf32_phdr);
   fprintf(stdout, "Program Headers: %ld bytes each, %i bytes total\n",
           sizeof(struct elf32_phdr), totalsize);
-  memset(buffer, 0, totalsize);
-  ph0 = (struct elf32_phdr *)buffer;
+  ph0 = (struct elf32_phdr *)file_out_buff+offset;
   ph0->p_filesz = 148;      // REDO THIS
   ph0->p_flags = 0x7000000; // This one stays
 
   // This header indicates where the SHA256 signatures are stored
-  ph1 = (struct elf32_phdr *)(buffer + sizeof(struct elf32_phdr));
+  ph1 = (struct elf32_phdr *)(file_out_buff+offset + sizeof(struct elf32_phdr));
   ph1->p_offset = 0x1000; // Offset 1 at 4096 bytes
   ph1->p_vaddr = 0x5000;
   ph1->p_paddr = 0x5000;
@@ -109,7 +112,7 @@ int make_default_program_headers(uint8_t *buffer) {
   ph1->p_align = 4096;   // 4096
 
   // This header indicates where does the actual MCFG data start
-  ph2 = (struct elf32_phdr *)(buffer + (2 * sizeof(struct elf32_phdr)));
+  ph2 = (struct elf32_phdr *)(file_out_buff+offset + (2 * sizeof(struct elf32_phdr)));
   ph2->p_type = 1;
   ph2->p_offset = 0x2000; // Our entry point is at 8192 bytes
   ph2->p_vaddr = 0;
@@ -125,11 +128,10 @@ int make_default_program_headers(uint8_t *buffer) {
  * Make hash structure with placeholders.
  */
 
-int make_default_hash_headers(uint8_t *buffer) {
+int make_default_hash_headers(uint32_t offset) {
+  fprintf(stdout, " - Building default hash structure\n");
   int size = sizeof(struct hash_segment_header);
-  buffer = malloc(size);
-  memset(buffer, 0, size);
-  hash = (struct hash_segment_header *)buffer;
+  hash = (struct hash_segment_header *)(file_out_buff+offset);
 
   hash->version = 0x00;
   hash->type = 0x03;
@@ -141,6 +143,24 @@ int make_default_hash_headers(uint8_t *buffer) {
   hash->cert_chain_addr = 0x5088;
   hash->cert_chain_size = 0x00;
   // We can't yet calculate the hash here
+  return size;
+}
+
+int make_mcfg_header(uint32_t offset) {
+  int size = offset+sizeof(struct mcfg_file_header) + sizeof(struct mcfg_sub_version_data);
+  mcfg_head_out = (struct mcfg_file_header *)(file_out_buff+offset);
+  mcfg_sub_out = (struct mcfg_sub_version_data *)(file_out_buff+(offset+sizeof(struct mcfg_file_header)));
+  /* HEADER */
+  memcpy(mcfg_head_out->magic, MCFG_FILE_HEADER_MAGIC, 4);
+  mcfg_head_out->config_type = 1;
+  mcfg_head_out->no_of_items = mcfg_head_in->no_of_items;
+  mcfg_head_out->carrier_id = mcfg_head_in->carrier_id;
+  mcfg_head_out->padding = 0x00;
+
+  /* Whatever this is */
+  mcfg_sub_out->magic = SUB_MAGIC_NUM;
+  mcfg_sub_out->len = 4;
+  mcfg_sub_out->data = mcfg_sub_in->data;
 
   return size;
 }
@@ -225,8 +245,20 @@ int check_input_file() {
     fprintf(stderr, "Error: ELF header doesn't match!\n");
     return -EINVAL;
   }
-
   fprintf(stdout, "OK!\n");
+    if (debug) {
+    fprintf(stdout, "ELF Header hex dump:\n");
+    int count = 0;
+    for (int i = 0; i < sizeof(struct Elf32_Ehdr); i++) {
+      fprintf(stdout, "%.2x ", file_in_buff[i]);
+      count++;
+      if (count > 15) {
+        fprintf(stdout, "\n");
+        count = 0;
+      }
+    }
+    fprintf(stdout, "\n");
+  }
   fprintf(stdout, "Checking program headers... \n");
   if (elf_hdr_in->e_phnum < 3) {
     fprintf(stderr,
@@ -278,17 +310,17 @@ int check_input_file() {
     fprintf(stderr, "Error: Invalid  MCFG file MAGIC!\n");
     return -EINVAL;
   }
+  mcfg_sub_in = (struct mcfg_sub_version_data*) (file_in_buff + ph2_in->p_offset + sizeof(struct mcfg_file_header));
 
   fprintf(stdout, "Found it!\n");
   fprintf(stdout, "   - Format version: %i\n", mcfg_head_in->format_version);
   fprintf(stdout, "   - Configuration type: %s\n", mcfg_head_in->config_type < 1 ? "HW Config" : "SW Config");
   fprintf(stdout, "   - Number of items in config: %i\n", mcfg_head_in->no_of_items);
   fprintf(stdout, "   - Carrier ID %i \n", mcfg_head_in->carrier_id);
-  struct mcfg_sub_version_data *headsub = (struct mcfg_sub_version_data*) (file_in_buff + ph2_in->p_offset + sizeof(struct mcfg_file_header));
   fprintf(stdout, "   - Sub-header data:\n");
-  fprintf(stdout, "     - Magic: %x\n", headsub->magic);
-  fprintf(stdout, "     - Size: %i\n", headsub->len);
-  fprintf(stdout, "     - Data: %.8x\n", headsub->data);
+  fprintf(stdout, "     - Magic: %x\n", mcfg_sub_in->magic);
+  fprintf(stdout, "     - Size: %i\n", mcfg_sub_in->len);
+  fprintf(stdout, "     - Data: %.8x\n", mcfg_sub_in->data);
 
   if (mcfg_head_in->config_type != MCFG_FILETYPE_SW) {
     fprintf(stderr,
@@ -329,7 +361,7 @@ This has some other unknown sections:
 54 52 4c 00 02 00 00 01 01 04 00 14 f3 01 06 03 0a
 .....sec3-cont.................. ....sec4.........
 00 43 54 41 2d 4c 61 62 2d 43 54 04 06 00 00 01 00
-........ ....sec5......... .....sec6........ ..sec7
+........ ....sec5...........  ..sec6........ ..sec7
 00 00 00 05 04 00 14 f3 01 06 06 02 00 00 00 07 04
 .............. ..........UNKNWN.......
 00 08 00 00 00 00 00 00 00 51 00 00 00
@@ -387,8 +419,10 @@ char *get_nvitem_name(uint32_t id) {
   return "Unknwon";
 }
 int analyze_footer(uint8_t *footer, uint16_t sz) {
+  int sections_parsed = 0;
   int done = 0;
   uint32_t padded_bytes = 0;
+  memset(footer_items, 0, sizeof(struct mcfg_footer_section)* MAX_FOOTER_SECTIONS);
   if (!debug)
     fprintf(stdout, "\nAnalyzing footer with size of %i bytes\n", sz);
   if (sz <
@@ -427,6 +461,7 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
   uint32_t *end_marker = (uint32_t *)(footer + sz - 4);
   padded_bytes = *end_marker - footer_in->len;
   fprintf(stdout, " - Padding at the end: %i bytes \n", padded_bytes);
+
   uint32_t curr_obj_offset = sizeof(struct mcfg_footer);
   uint32_t max_obj_size = footer_in->len - padded_bytes - sizeof(uint32_t);
   // Pointers to reuse later
@@ -437,12 +472,19 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
   struct mcfg_footer_section_allowed_iccids *sec4;
   /* Now find each section */
   fprintf(stdout, "Footer sections:\n");
+  int prev_offset = curr_obj_offset;
   do {
+    if (sections_parsed > 15) {
+      fprintf(stderr, "Error: Exceeded maximum number of sections for the footer\n");
+      return -ENOSPC;
+    }
+
     struct mcfg_footer_proto *proto =
         (struct mcfg_footer_proto *)(footer + curr_obj_offset);
 
     fprintf(stdout, " - %s (#%i): %i bytes\n", get_section_name(proto->id), proto->id,
             proto->len);
+
     switch (proto->id) {
     case MCFG_FOOTER_SECTION_VERSION_1: // Fixed size, 2 bytes, CONSTANT
       sec0 = (struct mcfg_footer_section_version1 *)(footer + curr_obj_offset);
@@ -490,11 +532,17 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
     if (proto->len == 0) {
       curr_obj_offset++;
     }
-    proto = NULL;
     if (curr_obj_offset >= max_obj_size) {
       done = 1;
     }
 
+    footer_items[sections_parsed].id = proto->id;
+    footer_items[sections_parsed].size = curr_obj_offset-prev_offset;
+    memcpy(footer_items[sections_parsed].blob, (footer+prev_offset), curr_obj_offset-prev_offset);
+    fprintf(stdout, "Object %i -> %i\n", proto->id, footer_items[sections_parsed].id);
+    prev_offset = curr_obj_offset;
+    proto = NULL;
+    sections_parsed++;
   } while (!done);
 
   return 0;
@@ -655,15 +703,54 @@ int process_nv_configuration_data() {
   }
 
   /* NOW WE WRITE */
-  file_out_buff = malloc(file_in_sz);
-  make_elf_header(file_out_buff);
-  int totalsize = 3 * sizeof(struct elf32_phdr);
-  fprintf(stdout, "Building Program Headers: %ld bytes each, %i bytes total\n",
-          sizeof(struct elf32_phdr), totalsize);
-  make_default_program_headers((file_out_buff+sizeof(struct Elf32_Ehdr)));
+  file_out_sz = file_in_sz *2 ; // dont do this
+  int output_offset = 0;
+  fprintf(stdout, "Recreating file...\n");
+  fprintf(stdout, " - Allocating %i bytes for the output file\n", file_out_sz);
+  file_out_buff = calloc(file_out_sz, sizeof(uint8_t));
+  memset(file_out_buff, 0x00, file_out_sz);
 
+  fprintf(stdout, " - ELF header...\n");
+  output_offset = make_elf_header(output_offset);
 
+  fprintf(stdout, " - Program headers\n");
+  output_offset+= make_default_program_headers(output_offset);
 
+  fprintf(stdout, " - Building the hash section\n");
+  output_offset+= make_default_hash_headers(HASH_SECTION_OFFSET);
+
+  fprintf(stdout, " - Modem Config Write begin\n");
+  output_offset = MCFG_DATA_OFFSET;
+  fprintf(stdout, "   - Header\n");
+  output_offset = make_mcfg_header(output_offset);
+  fprintf(stdout, "Current offset: %.4x\n", output_offset);
+  fprintf(stdout, "   - NV Items and EFS Data: ");
+  for (int i = 0; i < mcfg_head_out->no_of_items; i++) {
+    fprintf (stdout, "%i ", nv_items[i].id);
+    memcpy((file_out_buff+output_offset), nv_items[i].blob, nv_items[i].size);
+    output_offset+=nv_items[i].size;
+  }
+  fprintf(stdout, "\n");
+  fprintf(stdout, "   - Footer\n");
+  fprintf(stdout, "     - Header\n");
+  
+  fprintf(stdout, "Current offset: %.4x\n", output_offset);
+  footer_out = (struct mcfg_footer *)(file_out_buff+output_offset);
+  footer_out->len = 0xff;
+  footer_out->footer_magic1 = 0x0a;
+  footer_out->footer_magic2 = 0xa1;
+  memcpy(footer_out->magic, MCFG_FILE_FOOTER_MAGIC, 8);
+  output_offset+= sizeof(struct mcfg_footer);
+  fprintf(stdout, "     - Sections: ");
+   for (int i = 0; i < MAX_FOOTER_SECTIONS; i++) {
+    if (footer_items[i].size > 0) {
+      fprintf(stdout, "#%i %ib ", footer_items[i].id, footer_items[i].size);
+      memcpy((file_out_buff+output_offset), footer_items[i].blob, footer_items[i].size);
+      output_offset+=footer_items[i].size;
+    }
+  }
+  fprintf(stdout, "\n");
+  /* Add padding, recalculate hashes */
   return 0;
 }
 
@@ -726,7 +813,8 @@ int main(int argc, char *argv[]) {
     return -EINVAL;
   }
 
-  fwrite(file_out_buff, file_in_sz, 1, file_out);
+  fprintf(stdout, "Writing to disk\n");
+  fwrite(file_out_buff, 1, file_out_sz, file_out);
   free(file_in_buff);
   fclose(file_out);
   return 0;

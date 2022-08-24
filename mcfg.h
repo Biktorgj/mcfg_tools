@@ -13,7 +13,7 @@
 #define MCFG_FILE_HEADER_MAGIC "MCFG"
 #define MCFG_FILE_FOOTER_MAGIC "MCFG_TRL"
 
-#define VERSION_NUM 4995
+#define SUB_MAGIC_NUM 4995
 #define MAX_NUM_ICCIDS 32
 #define MAX_OBJ_SIZE 16384
 #define SHA256_HASH_SIZE 32
@@ -26,10 +26,18 @@
 #define PH_OFFSET 0x0034
 #define HASH_SECTION_OFFSET 0x1000
 #define MCFG_DATA_OFFSET 0x2000
+#define MAX_FOOTER_SECTIONS 16
 
 struct item_blob {
   uint32_t id;
   uint8_t type;
+  uint16_t offset;
+  uint16_t size;
+  uint8_t blob[MAX_OBJ_SIZE];
+};
+
+struct mcfg_footer_section {
+  uint8_t id;
   uint16_t offset;
   uint16_t size;
   uint8_t blob[MAX_OBJ_SIZE];
