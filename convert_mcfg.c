@@ -466,6 +466,11 @@ char *get_nvitem_name(uint32_t id) {
 
   return "Unknwon";
 }
+
+uint32_t make_random_version_number(uint32_t nMin, uint32_t nMax) {
+    return rand()%(nMax-nMin) + nMin;
+}
+
 int analyze_footer(uint8_t *footer, uint16_t sz) {
   int sections_parsed = 0;
   int done = 0;
@@ -544,7 +549,10 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
       break;
     case MCFG_FOOTER_SECTION_VERSION_2: // Fixed size, 4 bytes
       sec1 = (struct mcfg_footer_section_version2 *)(footer + curr_obj_offset);
-      fprintf(stdout, "   - Version: %i\n", sec1->data);
+      fprintf(stdout, "   - Version: 0x%.8x\n", sec1->data);
+        //                                    0x05012626 0x050FFFFF
+      sec1->data = make_random_version_number(0x05012026,0x050FFFFF);
+      fprintf(stdout, "   - Version: 0x%.8x\n", sec1->data);
       break;
     case MCFG_FOOTER_SECTION_APPLICABLE_MCC_MNC: // MCC+MNC
       sec2 = (struct mcfg_footer_section_2 *)(footer + curr_obj_offset);
@@ -636,9 +644,9 @@ int process_nv_configuration_data() {
     switch (item->type) {
     case MCFG_ITEM_TYPE_NV:
     case MCFG_ITEM_TYPE_UNKNOWN:
-      if (debug)
-        fprintf(stdout, "Item %i at offset %i: NV data\n", i, current_offset);
       nvitem = (struct mcfg_nvitem *)(file_in_buff + current_offset);
+      if (debug)
+        fprintf(stdout, "Item %i (ID %i) at offset %i: NV data\n", i, nvitem->id, current_offset);
       current_offset += sizeof(struct mcfg_nvitem) + nvitem->payload_size;
       nv_items[i].size = current_offset - nv_items[i].offset;
       memcpy(nv_items[i].blob, (file_in_buff + nv_items[i].offset),
@@ -655,7 +663,7 @@ int process_nv_configuration_data() {
             cnt = 0;
           }
         }
-        fprintf(stdout, "\nAs str: %s\n", nv_items[i].blob);
+        fprintf(stdout, "\n");
       }
       break;
     case MCFG_ITEM_TYPE_NVFILE:
@@ -845,24 +853,23 @@ int process_nv_configuration_data() {
                  MCFG_DATA_OFFSET; // the last byte where we tell the padded
                                    // bytes is the uint32_t
   /* Hashes */
-  fprintf(stdout, " - Regenerating file hashes\n");
+  fprintf(stdout, " - Regenerating file hashes... \n");
   recreate_output_file_hash();
 
   if (debug) {
-
+    fprintf(stdout, "ELF-------------------\n");
     print_elf_data("Input", elf_hdr_in);
     print_elf_data("Output", elfbuf);
-    fprintf(stdout, "-------------------\n");
+    fprintf(stdout, "PH0-------------------\n");
     print_ph_data("Input", 0, ph0_in);
     print_ph_data("Output", 0, ph0);
-
+    fprintf(stdout, "PH1-------------------\n");
     print_ph_data("Input", 1, ph1_in);
     print_ph_data("Output", 1, ph1);
-
+    fprintf(stdout, "PH2-------------------\n");
     print_ph_data("Input", 2, ph2_in);
     print_ph_data("Output", 2, ph2);
-    fprintf(stdout, "-------------------\n");
-
+    fprintf(stdout, "HASH------------------\n");
     print_hash_data("Input", hash_in);
     print_hash_data("Output", hash);
   }
