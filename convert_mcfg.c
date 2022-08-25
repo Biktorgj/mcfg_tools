@@ -107,7 +107,7 @@ int make_default_program_headers(uint32_t offset) {
   fprintf(stdout, "Program Headers: %ld bytes each, %i bytes total\n",
           sizeof(struct elf32_phdr), totalsize);
   ph0 = (struct elf32_phdr *)(file_out_buff + offset);
-  ph0->p_filesz = 0; // Gets filled later, size of the elf+ph headers
+  ph0->p_filesz = 0;        // Gets filled later, size of the elf+ph headers
   ph0->p_flags = 0x7000000; // This one stays
 
   // This header indicates where the SHA256 signatures are stored
@@ -128,8 +128,8 @@ int make_default_program_headers(uint32_t offset) {
   ph2->p_offset = 0x2000; // Our entry point is at 8192 bytes
   ph2->p_vaddr = 0;
   ph2->p_paddr = 0;
-  ph2->p_filesz =  0; // Gets filled later, size of the actual MCFG file
-  ph2->p_memsz = 0; // Gets filled later, size of the actual MCFG file
+  ph2->p_filesz = 0; // Gets filled later, size of the actual MCFG file
+  ph2->p_memsz = 0;  // Gets filled later, size of the actual MCFG file
   ph2->p_flags = 0x6;
   ph2->p_align = 4;
 
@@ -194,22 +194,21 @@ int recreate_output_file_hash() {
   /* Compute SHA-256 sum. */
   // Hash 1:
   char hex_hash1[SHA256_HEX_SIZE];
+  char hex_hash2[SHA256_HEX_SIZE];
   sha256_hex((shabuf), shabufsize, hex_hash1);
   sha256_bytes((shabuf), shabufsize, hash->hash1);
 
   /* Print result. */
-  printf("HASH 1 SHA-256 sum is:\n");
-  printf("%s\n", hex_hash1);
+  printf("  - Hash 1 (headers) SHA-256 sum is: %s\n", hex_hash1);
+
   // Hash 2:
-  char hex[SHA256_HEX_SIZE];
   sha256_hex((file_out_buff + MCFG_DATA_OFFSET), file_out_sz - MCFG_DATA_OFFSET,
-             hex);
+             hex_hash2);
   sha256_bytes((file_out_buff + MCFG_DATA_OFFSET),
                file_out_sz - MCFG_DATA_OFFSET, hash->hash2);
 
   /* Print result. */
-  printf("HASH 2 SHA-256 sum is:\n");
-  printf("%s\n", hex);
+  printf("  - Hash 2 (contents) SHA-256 sum is: %s\n", hex_hash2);
   return 0;
 }
 
@@ -652,8 +651,7 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
     footer_items[sections_parsed].size = curr_obj_offset - prev_offset;
     memcpy(footer_items[sections_parsed].blob, (footer + prev_offset),
            curr_obj_offset - prev_offset);
-    fprintf(stdout, "Object %i -> %i\n", proto->id,
-            footer_items[sections_parsed].id);
+
     prev_offset = curr_obj_offset;
     proto = NULL;
     sections_parsed++;
@@ -827,10 +825,8 @@ int process_nv_configuration_data() {
   }
 
   /* NOW WE WRITE */
-  /* Why am I missing 24 bytes???) */
   file_out_sz =
-      (MCFG_DATA_OFFSET + input_nvitems_size + input_footer_size + 24) *
-      sizeof(uint8_t); // dont do this
+      (MCFG_DATA_OFFSET + input_nvitems_size + input_footer_size + sizeof(struct mcfg_file_header) + sizeof(struct mcfg_sub_version_data));
   fprintf(stdout, "Target file will be %i bytes (%i %i %i) (%i)\n", file_out_sz,
           MCFG_DATA_OFFSET, input_nvitems_size, input_footer_size, file_in_sz);
   int output_offset = 0;
@@ -852,7 +848,6 @@ int process_nv_configuration_data() {
   output_offset = MCFG_DATA_OFFSET;
   fprintf(stdout, "   - Header\n");
   output_offset = make_mcfg_header(output_offset);
-  fprintf(stdout, "Current offset: %.4x\n", output_offset);
   fprintf(stdout, "   - NV Items and EFS Data: ");
   for (int i = 0; i < mcfg_head_out->no_of_items; i++) {
     fprintf(stdout, "%i ", nv_items[i].id);
@@ -865,7 +860,6 @@ int process_nv_configuration_data() {
 
   fprintf(stdout, "     - Header\n");
 
-  fprintf(stdout, "Current offset: %.4x\n", output_offset);
   footer_out = (struct mcfg_footer *)(file_out_buff + output_offset);
   footer_out->footer_magic1 = 0x0a;
   footer_out->footer_magic2 = 0xa1;
@@ -884,41 +878,45 @@ int process_nv_configuration_data() {
 
   /* Footer padding */
   uint32_t footer_full_sz = output_offset - initial_footer_offset;
-  uint32_t padding_bytes_required = 4 - (footer_full_sz % 4);
-  footer_out->len = footer_full_sz+ sizeof(uint32_t);
+  footer_out->len = footer_full_sz + sizeof(uint32_t);
   footer_out->size_trimmed = footer_out->len - 0x10;
+  uint8_t padding_bytes_required = 4 - (output_offset % 4);
   fprintf(stdout, "     - Padding needed: %i byte\n", padding_bytes_required);
   for (uint32_t i = 0; i < padding_bytes_required; i++) {
     file_out_buff[output_offset] = 0x00;
     output_offset++;
   }
-  file_out_buff[output_offset] = padding_bytes_required + footer_out->len ;
+  file_out_buff[output_offset] = padding_bytes_required + footer_out->len;
   // Calculate filesizes for the different program headers
-  ph0->p_filesz = sizeof(struct Elf32_Ehdr) + (3* sizeof(struct elf32_phdr));
+  ph0->p_filesz = sizeof(struct Elf32_Ehdr) + (3 * sizeof(struct elf32_phdr));
   ph1->p_filesz = sizeof(struct hash_segment_header);
-  ph2->p_filesz = sizeof(uint32_t) + output_offset - MCFG_DATA_OFFSET; // the last byte where we tell the padded bytes is the uint32_t
-  ph2->p_memsz = sizeof(uint32_t) + output_offset - MCFG_DATA_OFFSET; // the last byte where we tell the padded bytes is the uint32_t
+  ph2->p_filesz = sizeof(uint32_t) + output_offset -
+                  MCFG_DATA_OFFSET; // the last byte where we tell the padded
+                                    // bytes is the uint32_t
+  ph2->p_memsz = sizeof(uint32_t) + output_offset -
+                 MCFG_DATA_OFFSET; // the last byte where we tell the padded
+                                   // bytes is the uint32_t
   /* Hashes */
+  fprintf(stdout, " - Regenerating file hashes\n");
   recreate_output_file_hash();
-
 
   if (debug) {
 
-  print_elf_data("Input", elf_hdr_in);
-  print_elf_data("Output", elfbuf);
-  fprintf(stdout, "-------------------\n");
-  print_ph_data("Input", 0, ph0_in);
-  print_ph_data("Output", 0, ph0);
+    print_elf_data("Input", elf_hdr_in);
+    print_elf_data("Output", elfbuf);
+    fprintf(stdout, "-------------------\n");
+    print_ph_data("Input", 0, ph0_in);
+    print_ph_data("Output", 0, ph0);
 
-  print_ph_data("Input", 1, ph1_in);
-  print_ph_data("Output", 1, ph1);
+    print_ph_data("Input", 1, ph1_in);
+    print_ph_data("Output", 1, ph1);
 
-  print_ph_data("Input", 2, ph2_in);
-  print_ph_data("Output", 2, ph2);
-  fprintf(stdout, "-------------------\n");
+    print_ph_data("Input", 2, ph2_in);
+    print_ph_data("Output", 2, ph2);
+    fprintf(stdout, "-------------------\n");
 
-  print_hash_data("Input", hash_in);
-  print_hash_data("Output", hash);
+    print_hash_data("Input", hash_in);
+    print_hash_data("Output", hash);
   }
   return 0;
 }
@@ -982,9 +980,11 @@ int main(int argc, char *argv[]) {
     return -EINVAL;
   }
 
-  fprintf(stdout, "Writing to disk\n");
+  fprintf(stdout, "Writing to disk... ");
   fwrite(file_out_buff, 1, file_out_sz, file_out);
-  free(file_in_buff);
+  fprintf(stdout, "Done!\n");
   fclose(file_out);
+  free(file_out_buff);
+  free(file_in_buff);
   return 0;
 }
