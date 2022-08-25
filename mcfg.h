@@ -112,7 +112,7 @@ struct mcfg_file_header {
 struct mcfg_sub_version_data { // unsure
   uint16_t magic;            // 0x83 0x13, another magic number
   uint16_t len;           // 0x04 0x00
-  uint32_t data;           // 0x01 0x00 || 0x03 0x00
+  uint32_t carrier_version;           // 0x01 0x00 || 0x03 0x00
 } __attribute__((packed));
 
 struct mcfg_nvitem {
@@ -189,6 +189,12 @@ struct mcfg_footer_section_allowed_iccids {
   uint32_t iccids[0]; // 898601 898601
 } __attribute__((packed));
 
+struct mcfg_footer_section_carrier_id {
+  uint8_t id;         // 5
+  uint16_t len;       // 4
+  uint32_t carrier_version; // Same value as the header
+} __attribute__((packed));
+
 struct mcfg_footer {
   uint32_t len;
   uint32_t footer_magic1; // 0x0a 00 00 00
@@ -241,6 +247,7 @@ enum {
   MCFG_FOOTER_SECTION_APPLICABLE_MCC_MNC = 0x02,
   MCFG_FOOTER_SECTION_PROFILE_NAME = 0x03,
   MCFG_FOOTER_SECTION_ALLOWED_ICCIDS = 0x04,
+  MCFG_FOOTER_SECTION_CARRIER_VERSION_ID = 0x05,
 };
 
 /* This list is absolutely incomplete.

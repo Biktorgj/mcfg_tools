@@ -178,7 +178,7 @@ int make_mcfg_header(uint32_t offset) {
   /* Whatever this is */
   mcfg_sub_out->magic = SUB_MAGIC_NUM;
   mcfg_sub_out->len = 4;
-  mcfg_sub_out->data = mcfg_sub_in->data;
+  mcfg_sub_out->carrier_version = mcfg_sub_in->carrier_version;
 
   return size;
 }
@@ -198,9 +198,6 @@ int recreate_output_file_hash() {
   sha256_hex((shabuf), shabufsize, hex_hash1);
   sha256_bytes((shabuf), shabufsize, hash->hash1);
 
-  /* Print result. */
-  printf("  - Hash 1 (headers) SHA-256 sum is: %s\n", hex_hash1);
-
   // Hash 2:
   sha256_hex((file_out_buff + MCFG_DATA_OFFSET), file_out_sz - MCFG_DATA_OFFSET,
              hex_hash2);
@@ -208,6 +205,7 @@ int recreate_output_file_hash() {
                file_out_sz - MCFG_DATA_OFFSET, hash->hash2);
 
   /* Print result. */
+  printf("  - Hash 1 (headers) SHA-256 sum is: %s\n", hex_hash1);
   printf("  - Hash 2 (contents) SHA-256 sum is: %s\n", hex_hash2);
   return 0;
 }
@@ -216,6 +214,8 @@ int recreate_output_file_hash() {
  *
  * Depending on the things we need to include,
  * it might need quite a bunch of params
+ * Not used for now. There's some sections
+ * I can't identify
  */
 int make_mcfg_footer_proto(uint8_t *buffer, uint8_t do_footer_section_magic1,
                            uint8_t do_footer_section_magic2,
@@ -426,7 +426,7 @@ int check_input_file() {
   fprintf(stdout, "   - Sub-header data:\n");
   fprintf(stdout, "     - Magic: %x\n", mcfg_sub_in->magic);
   fprintf(stdout, "     - Size: %i\n", mcfg_sub_in->len);
-  fprintf(stdout, "     - Data: %.8x\n", mcfg_sub_in->data);
+  fprintf(stdout, "     - Data: %.8x\n", mcfg_sub_in->carrier_version);
 
   if (mcfg_head_in->config_type != MCFG_FILETYPE_SW) {
     fprintf(stderr,
@@ -437,66 +437,6 @@ int check_input_file() {
   fprintf(stdout, "File is OK!\n");
   return 0;
 }
-/* Samples:
-....sz..... ....fot.... ....  ..... ....magic....
-4f 00 00 00 0a 00 00 00 a1 00 3f 00 4d 43 46 47 5f
-........ ..sec0........ ....sec1........... ..sec3.
-54 52 4c 00 02 00 00 01 01 04 00 20 08 01 05 03 10
-.......sec3-cont..................................
-00 52 4f 57 5f 47 65 6e 65 72 69 63 5f 33 47 50 50
-..sec4.......  .....sec5........... ...sec6.......
-04 02 00 01 00 05 04 00 20 08 01 05 06 02 00 01 00
-...sec7............. ....UNKN.........
-07 04 00 04 00 00 00 00 00 51 00 00 00
-
-...sz...... ...foot... .....  .... .....magic.....
-4e 00 00 00 0a 00 00 00 a1 00 3e 00 4d 43 46 47 5f
-.......  ...sec0....... ...sec1............. .....
-54 52 4c 00 02 00 00 01 01 04 00 3d 15 01 02 02 04
-..sec2.......  ...sec3............................
-00 cc 01 01 00 03 13 00 43 6f 6d 6d 65 72 63 69 61
-.....sec3-cont............... ....sec4............
-6c 2d 43 55 2d 43 53 2d 53 53 04 0a 00 00 02 29 b6
-................. ....UNKN.........
-0d 00 29 b6 0d 00 00 00 50 00 00 00
-
-This has some other unknown sections:
-....sz..... ...footer.. .... .-x10. ....magic....
-4d 00 00 00 0a 00 00 00 a1 00 3d 00 4d 43 46 47 5f
-........ ..sec0........ ...sec1............. ..sec3
-54 52 4c 00 02 00 00 01 01 04 00 14 f3 01 06 03 0a
-.....sec3-cont.................. ....sec4.........
-00 43 54 41 2d 4c 61 62 2d 43 54 04 06 00 00 01 00
-........ ....sec5...........  ..sec6........ ..sec7
-00 00 00 05 04 00 14 f3 01 06 06 02 00 00 00 07 04
-.............. ..........UNKNWN.......
-00 08 00 00 00 00 00 00 00 51 00 00 00
-
-A larger one
-...sz...... ..footer... ....  ....  ....magic....
-91 00 00 00 0a 00 00 00 a1 00 81 00 4d 43 46 47 5f
-.......  ...sec0...... ...sec1.............. .....
-54 52 4c 00 02 00 00 01 01 04 00 b1 18 01 06 02 04
-sec2.......... ....sec3...........................
-00 cc 01 01 00 03 1b 00 4e 6f 56 5f 4f 70 65 6e 4d
-...................sec3-cont......................
-6b 74 2d 43 6f 6d 6d 65 72 63 69 61 6c 2d 43 4d 43
-.. ...sec4........................................
-43 04 16 00 00 05 28 b6 0d 00 2e b6 0d 00 2a b6 0d
-.......................... ...sec5............. ..
-00 2f b6 0d 00 d9 b5 0d 00 05 04 00 b0 18 01 06 06
-..sec6............................................
-1e 00 00 07 cc 01 00 00 cc 01 02 00 cc 01 07 00 cc
-............................................ .....
-01 08 00 c6 01 0c 00 c6 01 0d 00 cc 01 04 00 07 04
-...sec7....... ....UNKN.........
-00 00 00 00 00 00 00 93 00 00 00
-
-UNKNWN == Padding bytes + sz?
-So we can pick the last one as a uint32, and the sz from the header and find out
-the amount of padding? or as a checksum of sorts?
-
-*/
 
 char *get_section_name(uint8_t section_id) {
   switch (section_id) {
@@ -510,6 +450,8 @@ char *get_section_name(uint8_t section_id) {
     return "Carrier Profile name";
   case MCFG_FOOTER_SECTION_ALLOWED_ICCIDS:
     return "Allowed SIM ICC IDs for this profile";
+  case MCFG_FOOTER_SECTION_CARRIER_VERSION_ID:
+    return "Carrier version ID";
   }
 
   return "Unknown section";
@@ -578,6 +520,7 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
   struct mcfg_footer_section_2 *sec2;
   struct mcfg_footer_section_carrier_name *sec3;
   struct mcfg_footer_section_allowed_iccids *sec4;
+  struct mcfg_footer_section_carrier_id *sec5;
   /* Now find each section */
   fprintf(stdout, "Footer sections:\n");
   int prev_offset = curr_obj_offset;
@@ -613,6 +556,7 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
       fprintf(stdout, "   - Profile name: %s\n",
               (char *)sec3->carrier_config_name);
       break;
+
     case MCFG_FOOTER_SECTION_ALLOWED_ICCIDS: // ICCIDs
       sec4 = (struct mcfg_footer_section_allowed_iccids *)(footer +
                                                            curr_obj_offset);
@@ -621,7 +565,11 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
                 sec4->iccids[tmp]);
       }
       break;
-
+    case MCFG_FOOTER_SECTION_CARRIER_VERSION_ID:
+      sec5 = (struct mcfg_footer_section_carrier_id *)(footer +
+                                                           curr_obj_offset);
+      fprintf(stdout, "   - Carrier version ID: %.4x\n", sec5->carrier_version);
+      break;
     default:
       fprintf(
           stdout,
