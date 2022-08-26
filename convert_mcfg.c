@@ -1,4 +1,5 @@
 #include "mcfg.h"
+#include "nvitems.h"
 #include "sha256.h"
 #include <asm-generic/errno-base.h>
 #include <endian.h>
@@ -8,7 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
 // Settings
 uint8_t debug;
 
@@ -55,7 +55,7 @@ struct mcfg_file_meta {
 
 void print_help() {
   fprintf(stdout, "Usage:\n");
-  fprintf(stdout, "  make_mcfg -i INPUT_FILE -o OUTPUT_FILE\n");
+  fprintf(stdout, "  convert_mcfg -i INPUT_FILE -o OUTPUT_FILE\n");
   fprintf(stdout, "Arguments: \n"
                   "\t-i: Input file to read\n"
                   "\t-o: Output file\n"
@@ -467,10 +467,6 @@ char *get_nvitem_name(uint32_t id) {
   return "Unknwon";
 }
 
-uint32_t make_random_version_number(uint32_t nMin, uint32_t nMax) {
-    return rand()%(nMax-nMin) + nMin;
-}
-
 int analyze_footer(uint8_t *footer, uint16_t sz) {
   int sections_parsed = 0;
   int done = 0;
@@ -549,10 +545,11 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
       break;
     case MCFG_FOOTER_SECTION_VERSION_2: // Fixed size, 4 bytes
       sec1 = (struct mcfg_footer_section_version2 *)(footer + curr_obj_offset);
-      fprintf(stdout, "   - Version: 0x%.8x\n", sec1->data);
-        //                                    0x05012626 0x050FFFFF
-      sec1->data = make_random_version_number(0x05012026,0x050FFFFF);
-      fprintf(stdout, "   - Version: 0x%.8x\n", sec1->data);
+      fprintf(stdout, "   - Initial version: 0x%.8x", sec1->data);
+      while(sec1->data > 0x06000000) {
+        sec1->data-=0x01000000;
+      }
+      fprintf(stdout, " --> new: 0x%.8x\n", sec1->data);
       break;
     case MCFG_FOOTER_SECTION_APPLICABLE_MCC_MNC: // MCC+MNC
       sec2 = (struct mcfg_footer_section_2 *)(footer + curr_obj_offset);
@@ -739,14 +736,14 @@ int process_nv_configuration_data() {
        * these item types
        */
       fprintf(stderr,
-              "Don't know how to handle NV data type %i (0x%.2x), bailing out, "
+              "Don't know how to handle NV data type %i (0x%.2x) at 0x%.8x, bailing out, "
               "sorry\n",
-              item->type, item->type);
-      for (int dbf = -8; dbf < 8; dbf++) {
-        if (dbf == 0) {
-          fprintf(stderr, " ... ");
+              item->type, item->type, current_offset);
+      for (uint32_t dbf = current_offset-128; dbf < file_in_sz; dbf++) {
+        if (dbf == current_offset) {
+          fprintf(stderr, "\n ... \n");
         }
-        tmpoffset = (file_in_buff + nv_items[i].offset + dbf);
+        tmpoffset = (file_in_buff + dbf);
         fprintf(stderr, "%.2x ", *tmpoffset);
       }
       fprintf(stderr, "\n");
