@@ -50,6 +50,6 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-read_mcfg
-write_mcfg
-
+convert_mcfg
+extract_mcfg
+samples
