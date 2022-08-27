@@ -32,11 +32,26 @@ struct hash_segment_header *hash_in;
 struct mcfg_file_header *mcfg_head_in;
 struct mcfg_sub_version_data *mcfg_sub_in;
 struct mcfg_footer_section footer_items[MAX_FOOTER_SECTIONS];
-// Output file
+// Output
+char *output_dir;
 char output_dir_nv[255];
 char output_dir_efs[255];
 char output_dir_footer[255];
 
+int add_file_to_dumplist(char *filename) {
+  FILE *dumpfile;
+  char name[512];
+  snprintf(name, 512, "%s/dump.list", output_dir);
+  dumpfile = fopen(name, "a");
+  if (dumpfile == NULL) {
+    fprintf(stderr, "Error opening dump list\n");
+    return -EINVAL;
+  }
+  fputs(filename, dumpfile);
+  fputc('\n', dumpfile);
+  fclose(dumpfile);
+  return 0;
+}
 void print_help() {
   fprintf(stdout, "Usage:\n");
   fprintf(stdout, "  extract_mcfg -i INPUT_FILE -o OUTPUT_FILE\n");
@@ -241,28 +256,29 @@ char *get_nvitem_name(uint32_t id) {
 
   return "Unknwon";
 }
-char *get_nvitem_as_filename(uint32_t id, uint8_t position) {
-  char *filename = malloc(512);
+void get_nvitem_as_filename(uint32_t id, uint8_t position, char *filename) {
   memset(filename, 0, 512);
+  char tmpfile[128];
+  memset(tmpfile, 0, 128);
   for (int i = 0; i < (sizeof(nvitem_names) / sizeof(nvitem_names[0])); i++) {
     if (id == nvitem_names[i].id) {
-      snprintf(filename, 512, "%s/%i__%u_%s.bin", output_dir_nv, position, id,
-               nvitem_names[i].name);
+      snprintf(tmpfile, 128, "%s.bin", nvitem_names[i].name);
     }
   }
-  for (int i = 0; i < strlen(filename); i++) {
-    if ((filename[i] < 'A' && filename[i] > 'Z') &&
-        (filename[i] < 'a' && filename[i] > 'z') &&
-        (filename[i] < '0' && filename[i] > '9')) {
-      filename[i] = '-';
+  if (tmpfile[0] == 0x00) {
+    snprintf(tmpfile, 128, "unknown.bin");
+  }
+  for (int i = 0; i < strlen(tmpfile); i++) {
+    if (tmpfile[i] == '/' || tmpfile[i] == ' ') {
+      tmpfile[i] = '-';
     }
   }
-  return filename;
+  snprintf(filename, 512, "%s/%i_%u_%s", output_dir_nv, position, id, tmpfile);
 }
 
 char *get_efsitem_as_filename(char *name, uint8_t position) {
   char *filename = malloc(512);
-  char *tmpdir = malloc(512);
+  char tmpdir[512];
   memset(filename, 0, 512);
   int last_folder_mark = 0;
   struct stat st = {0};
@@ -284,7 +300,6 @@ char *get_efsitem_as_filename(char *name, uint8_t position) {
 
   snprintf(filename, 512, "%s%s.bin", output_dir_efs, name);
 
-  free(tmpdir);
   return filename;
 }
 
@@ -292,17 +307,18 @@ int save_file(char *filename, uint8_t *data, uint32_t sz) {
   FILE *fp;
   fp = fopen(filename, "wb");
   if (fp == NULL) {
+    fprintf(stderr, "Error opening %s for writing!\n", filename);
     return -EINVAL;
   }
   fwrite(data, 1, sz, fp);
   fclose(fp);
-  free(filename);
-  return -0;
+  return 0;
 }
 int analyze_footer(uint8_t *footer, uint16_t sz) {
   int sections_parsed = 0;
   int done = 0;
   uint32_t padded_bytes = 0;
+  char filename[512];
   memset(footer_items, 0,
          sizeof(struct mcfg_footer_section) * MAX_FOOTER_SECTIONS);
   if (!debug)
@@ -432,7 +448,16 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
     footer_items[sections_parsed].size = curr_obj_offset - prev_offset;
     memcpy(footer_items[sections_parsed].blob, (footer + prev_offset),
            curr_obj_offset - prev_offset);
-
+    /* Save section to disk */
+    memset(filename, 0, 512);
+    snprintf(filename, 512, "%s/footer_section_%i.bin", output_dir_footer,
+             proto->id);
+    fprintf(stdout, "Saving to %s...\n", filename);
+    if (save_file(filename, footer_items[sections_parsed].blob,
+                  footer_items[sections_parsed].size) < 0) {
+      fprintf(stderr, "Error dumping footer section %i!\n", sections_parsed);
+    }
+    fprintf(stdout, "Saved!\n");
     prev_offset = curr_obj_offset;
     proto = NULL;
     sections_parsed++;
@@ -445,7 +470,7 @@ int process_nv_configuration_data() {
   fprintf(stdout, "%s: start\n", __func__);
   int num_items = mcfg_head_in->no_of_items;
   struct item_blob nv_items[num_items];
-
+  char filename[512];
   uint16_t current_offset = ph2_in->p_offset + sizeof(struct mcfg_file_header) +
                             sizeof(struct mcfg_sub_version_data);
   if (!debug) {
@@ -473,15 +498,18 @@ int process_nv_configuration_data() {
     case MCFG_ITEM_TYPE_UNKNOWN:
       nvitem = (struct mcfg_nvitem *)(file_in_buff + current_offset);
       if (debug)
-        fprintf(stdout, "Item %i (ID %i) at offset %i: NV data\n", i,
-                nvitem->id, current_offset);
+        fprintf(stdout, "Item %i (ID %i) at offset %i: NV data\n", i, item->id,
+                current_offset);
 
       current_offset += sizeof(struct mcfg_nvitem) + nvitem->payload_size;
       nv_items[i].size = current_offset - nv_items[i].offset;
       memcpy(nv_items[i].blob, (file_in_buff + nv_items[i].offset),
              nv_items[i].size);
-      if (save_file(get_nvitem_as_filename(nvitem->id, i), nv_items[i].blob,
-                    nv_items[i].size) < 0) {
+
+      memset(filename, 0, 512);
+      get_nvitem_as_filename(item->id, i, filename);
+      add_file_to_dumplist(filename);
+      if (save_file(filename, nv_items[i].blob, nv_items[i].size) < 0) {
         fprintf(stderr, "Error saving NV item %i\n", i);
       }
       nvitem = NULL;
@@ -527,6 +555,7 @@ int process_nv_configuration_data() {
                           file_section->section_len) < 0) {
               fprintf(stderr, "Error saving EFS item %i\n", i);
             }
+            add_file_to_dumplist(get_efsitem_as_filename(efsfilenametmp, i));
           } else {
             fprintf(stderr, "EFS File dump: Filename is empty!\n");
           }
@@ -562,6 +591,15 @@ int process_nv_configuration_data() {
       analyze_footer((file_in_buff + current_offset - sizeof(struct mcfg_item)),
                      input_footer_size);
 
+      memset(filename, 0, 512);
+      snprintf(filename, 512, "%s/footer_complete.bin", output_dir_footer);
+      fprintf(stdout, "Saving to %s...\n", filename);
+      if (save_file(filename,
+                    (file_in_buff + current_offset - sizeof(struct mcfg_item)),
+                    input_footer_size) < 0) {
+        fprintf(stderr, "Error dumping footer!\n");
+      }
+      add_file_to_dumplist(filename);
       if (i < (num_items - 1))
         fprintf(stderr,
                 "WARNING: There's more stuff beyond the footer. Something is "
@@ -628,7 +666,6 @@ int process_nv_configuration_data() {
 
 int main(int argc, char *argv[]) {
   char *input_file;
-  char *output_dir;
   int c;
   INPUT_ELF_OFFSET = 0;
   fprintf(stdout, "Qualcomm MCFG binary file extractor \n");
