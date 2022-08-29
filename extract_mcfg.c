@@ -38,26 +38,30 @@ char output_dir_nv[255];
 char output_dir_efs[255];
 char output_dir_footer[255];
 
-int add_file_to_dumplist(char *filename) {
+int add_file_to_dumplist(uint32_t id, uint8_t type, uint8_t attrib, char *filename) {
   FILE *dumpfile;
   char name[512];
+  char tmp[512];
   snprintf(name, 512, "%s/dump.list", output_dir);
+  snprintf(tmp, 512, "%i:%i:%i:%s", id, type, attrib, filename);
+
   dumpfile = fopen(name, "a");
   if (dumpfile == NULL) {
     fprintf(stderr, "Error opening dump list\n");
     return -EINVAL;
   }
-  fputs(filename, dumpfile);
+  fputs(tmp, dumpfile);
   fputc('\n', dumpfile);
   fclose(dumpfile);
   return 0;
 }
+
 void print_help() {
   fprintf(stdout, "Usage:\n");
   fprintf(stdout, "  extract_mcfg -i INPUT_FILE -o OUTPUT_FILE\n");
   fprintf(stdout, "Arguments: \n"
                   "\t-i: Input file to read\n"
-                  "\t-o: Output file\n"
+                  "\t-o: Output directory\n"
                   "\t-d: Print hex dumps\n");
 }
 
@@ -93,12 +97,14 @@ int prepare_output_dirs(char *output_dir) {
     fprintf(stderr, "ERROR: Output directory already exists!\n");
     return -EINVAL;
   }
+
   snprintf(output_dir_nv, 255, "%s/nvitems", output_dir);
   fprintf(stdout, " - NV Items at %s\n", output_dir_nv);
   if (mkdir(output_dir_nv, 0700) < 0) {
     fprintf(stderr, "Error creating output nvitems dir!\n");
     return -EINVAL;
   }
+
   snprintf(output_dir_efs, 255, "%s/efsitems", output_dir);
   fprintf(stdout, " - EFS Items at %s\n", output_dir_efs);
   if (mkdir(output_dir_efs, 0700) < 0) {
@@ -473,10 +479,17 @@ int process_nv_configuration_data() {
   char filename[512];
   uint16_t current_offset = ph2_in->p_offset + sizeof(struct mcfg_file_header) +
                             sizeof(struct mcfg_sub_version_data);
+  
+  memset(filename, 0, 512);
+  snprintf(filename, 512, "%s/header.bin", output_dir);
+  add_file_to_dumplist(0, 0, 0,filename);
+  if (save_file(filename, file_in_buff, current_offset) < 0) {
+        fprintf(stderr, "Error saving header block!\n");
+        return -EINVAL;
+      }
   if (!debug) {
     fprintf(stdout, "Processing items...\n");
   }
-  uint8_t *tmpoffset;
   input_nvitems_size = 0;
   for (int i = 0; i < num_items; i++) {
     struct mcfg_item *item =
@@ -489,6 +502,7 @@ int process_nv_configuration_data() {
     }
 
     nv_items[i].offset = current_offset;
+    nv_items[i].attrib = item->attrib;
     nv_items[i].type = item->type;
     nv_items[i].id = item->id;
     current_offset += sizeof(struct mcfg_item);
@@ -508,7 +522,7 @@ int process_nv_configuration_data() {
 
       memset(filename, 0, 512);
       get_nvitem_as_filename(item->id, i, filename);
-      add_file_to_dumplist(filename);
+      add_file_to_dumplist(item->id, item->type, item->attrib,filename);
       if (save_file(filename, nv_items[i].blob, nv_items[i].size) < 0) {
         fprintf(stderr, "Error saving NV item %i\n", i);
       }
@@ -555,7 +569,7 @@ int process_nv_configuration_data() {
                           file_section->section_len) < 0) {
               fprintf(stderr, "Error saving EFS item %i\n", i);
             }
-            add_file_to_dumplist(get_efsitem_as_filename(efsfilenametmp, i));
+            add_file_to_dumplist(item->id, item->type, item->attrib, get_efsitem_as_filename(efsfilenametmp, i));
           } else {
             fprintf(stderr, "EFS File dump: Filename is empty!\n");
           }
@@ -599,7 +613,7 @@ int process_nv_configuration_data() {
                     input_footer_size) < 0) {
         fprintf(stderr, "Error dumping footer!\n");
       }
-      add_file_to_dumplist(filename);
+      add_file_to_dumplist(item->id, item->type, item->attrib,filename);
       if (i < (num_items - 1))
         fprintf(stderr,
                 "WARNING: There's more stuff beyond the footer. Something is "
@@ -623,34 +637,6 @@ int process_nv_configuration_data() {
               "bailing out, "
               "sorry\n",
               item->type, item->type, current_offset);
-      for (uint32_t dbf = current_offset - 128; dbf < file_in_sz; dbf++) {
-        if (dbf == current_offset) {
-          fprintf(stderr, "\n ... \n");
-        }
-        tmpoffset = (file_in_buff + dbf);
-        fprintf(stderr, "%.2x ", *tmpoffset);
-      }
-      fprintf(stderr, "\n");
-      fprintf(stderr, "String::: \n%s\nEOF\n",
-              (file_in_buff + nv_items[i].offset));
-      /*      fprintf(stdout, "Item %i at offset %i: \n", i, current_offset);
-          nvitem = (struct mcfg_nvitem *)(file_in_buff + current_offset);
-          fprintf(stdout, "Payload size: %i byte\n", nvitem->payload_size);
-          current_offset += sizeof(struct mcfg_nvitem) + nvitem->payload_size;
-          nv_items[i].size = current_offset - nv_items[i].offset;
-          memcpy(nv_items[i].blob, (file_in_buff + nv_items[i].offset),
-                 nv_items[i].size);
-          nvitem = NULL;
-            int cnt = 0;
-            for (int k = 0; k < nv_items[i].size; k++) {
-              fprintf(stdout, "%.2x ", nv_items[i].blob[k]);
-              cnt++;
-              if (cnt > 32) {
-                fprintf(stdout, "\n");
-                cnt = 0;
-              }
-          }
-            fprintf(stdout, "\nAs str: %s\n", nv_items[i].blob);*/
       return -EINVAL;
       break;
     }
