@@ -31,6 +31,7 @@
 struct item_blob {
   uint32_t id;
   uint8_t type;
+  uint8_t attrib;
   uint16_t offset;
   uint16_t size;
   uint8_t blob[MAX_OBJ_SIZE];
@@ -101,8 +102,10 @@ struct mcfg_file_header {
   uint16_t format_version; // 0x02 0x00
   uint16_t config_type;    // MCFG_HW is 0, MCFG_SW is 1
   uint32_t no_of_items;    // Number of items in the file
-  uint16_t carrier_id;      // Each carrier seems to have a unique ID? either uin16_t + 2xbyte padding or a uint32_t and havent found a really big num
-  uint16_t padding;      // 0x00 0x00
+  uint16_t carrier_id; // Each carrier seems to have a unique ID? either uin16_t
+                       // + 2xbyte padding or a uint32_t and havent found a
+                       // really big num
+  uint16_t padding;    // 0x00 0x00
 } __attribute__((packed));
 
 /*
@@ -110,9 +113,9 @@ struct mcfg_file_header {
  *   Len is always 4...
  */
 struct mcfg_sub_version_data { // unsure
-  uint16_t magic;            // 0x83 0x13, another magic number
-  uint16_t len;           // 0x04 0x00
-  uint32_t carrier_version;           // 0x01 0x00 || 0x03 0x00
+  uint16_t magic;              // 0x83 0x13, another magic number
+  uint16_t len;                // 0x04 0x00
+  uint32_t carrier_version;    // 0x01 0x00 || 0x03 0x00
 } __attribute__((packed));
 
 struct mcfg_nvitem {
@@ -190,8 +193,8 @@ struct mcfg_footer_section_allowed_iccids {
 } __attribute__((packed));
 
 struct mcfg_footer_section_carrier_id {
-  uint8_t id;         // 5
-  uint16_t len;       // 4
+  uint8_t id;               // 5
+  uint16_t len;             // 4
   uint32_t carrier_version; // Same value as the header
 } __attribute__((packed));
 
