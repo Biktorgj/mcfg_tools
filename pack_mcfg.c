@@ -26,6 +26,7 @@ struct mcfg_dump_list_proto {
   char filename[MAX_PATH_SIZE];
   uint8_t blob[MAX_OBJ_SIZE];
   char diskpath[MAX_PATH_SIZE];
+  uint16_t filenamesz;
 } mcfg_dump_list[MAX_NUM_ITEMS];
 uint32_t num_elements;
 
@@ -44,7 +45,7 @@ struct elf32_phdr *ph2_in;
 struct hash_segment_header *hash_in;
 struct mcfg_file_header *mcfg_head_in;
 struct mcfg_sub_version_data *mcfg_sub_in;
-struct mcfg_footer_section footer_items[MAX_FOOTER_SECTIONS];
+
 // Output file
 FILE *file_out;
 struct Elf32_Ehdr *elfbuf;
@@ -59,15 +60,7 @@ struct mcfg_footer *footer_out;
 uint8_t *file_out_buff;
 uint32_t file_out_sz;
 
-struct mcfg_file_meta {
-  uint32_t elf_offset;
-  uint32_t ph0_offset;
-  uint32_t ph1_offset;
-  uint32_t ph2_offset;
-  uint32_t hash_offset;
-  uint32_t mcfg_start_offset;
-  uint32_t mcfg_footer_offset;
-};
+uint32_t efs_folder_offset;
 
 void print_help() {
   fprintf(stdout, "Usage:\n");
@@ -407,6 +400,7 @@ int repack_mcfg_data() {
   file_in_sz = mcfg_dump_list[0].size;
   file_in_buff = malloc(file_in_sz);
   memcpy(file_in_buff, mcfg_dump_list[0].blob, file_in_sz);
+
   char *tmptr = NULL;
   if (check_input_file() < 0) {
     fprintf(stderr, "FATAL: Error parsing the header file!(\n");
@@ -417,26 +411,35 @@ int repack_mcfg_data() {
     if (mcfg_dump_list[i].type == MCFG_ITEM_TYPE_FOOT) {
       input_footer_size = mcfg_dump_list[i].size;
     } else if (mcfg_dump_list[i].type == MCFG_ITEM_TYPE_NV) {
-    //  input_nvitems_size += sizeof(struct mcfg_item);
-     // input_nvitems_size += sizeof(struct mcfg_nvitem);
-      input_nvitems_size+= mcfg_dump_list[i].size;
+
+      input_nvitems_size+= mcfg_dump_list[i].size; // Contents of NV item
     } else if (mcfg_dump_list[i].type == MCFG_ITEM_TYPE_NVFILE ||
                mcfg_dump_list[i].type == MCFG_ITEM_TYPE_FILE) {
-    //  input_nvitems_size += sizeof(struct mcfg_item); // Item
-    //  input_nvitems_size += sizeof(struct mcfg_nvfile_part); // File path descriptor + contents
-      input_nvitems_size+= mcfg_dump_list[i].size; // Contents
-      printf("This is a efs item (%i): %s\n", i, mcfg_dump_list[i].filename);
+      int fcount = 0;
+      input_nvitems_size += sizeof(struct mcfg_item); // Item
+      input_nvitems_size += sizeof(struct mcfg_nvfile_part)*2; // File path descriptor + contents
+      input_nvitems_size+= mcfg_dump_list[i].size; // Contents of EFS file
       tmptr = mcfg_dump_list[i].filename;
-      while (tmptr) {
+      while (tmptr && fcount < 2) {
         if (*tmptr == '/') {
-          input_nvitems_size += strlen(tmptr)-1; // Path in section 1
-          printf("Filepath: %s %ld\n", tmptr, strlen(tmptr) -1);
-          memcpy(mcfg_dump_list[i].diskpath, tmptr, strlen(tmptr)-1);
-          break;
+          tmptr++;
+          fcount++;
         } else {
           tmptr++;
         }
       }
+      tmptr--;
+      mcfg_dump_list[i].filenamesz = strlen(tmptr)-3;
+      printf("Filename: %s of size %i\n", tmptr, mcfg_dump_list[i].filenamesz);
+      memcpy(mcfg_dump_list[i].diskpath, tmptr, mcfg_dump_list[i].filenamesz);
+      mcfg_dump_list[i].diskpath[(mcfg_dump_list[i].filenamesz-1)] = 0x00;
+      printf("Filename: %s of size %i\nAs hex:\n", tmptr, mcfg_dump_list[i].filenamesz);
+      for (int op =0 ; op < mcfg_dump_list[i].filenamesz; op++) {
+        printf ("%.2x ", mcfg_dump_list[i].diskpath[op]);
+      }
+      printf("\n");
+      input_nvitems_size += mcfg_dump_list[i].filenamesz; // Path in section 1 - '.bin' and where the '.' was we insert \0
+      printf("Filepath %s\n", mcfg_dump_list[i].diskpath);
     }
   }
 
@@ -468,31 +471,16 @@ int repack_mcfg_data() {
   fprintf(stdout, "   - Header\n");
   output_offset = make_mcfg_header(output_offset);
   fprintf(stdout, "   - NV Items and EFS Data: ");
-
   // Now we recreate the structures
   struct mcfg_item *item;
-  struct mcfg_nvitem *nvitem;
   struct mcfg_nvfile_part *file_section;
-
   for (int i = 1; i < num_elements; i++) {
-    fprintf(stdout, "%i ", mcfg_dump_list[i].id);
     switch (mcfg_dump_list[i].type) {
     case MCFG_ITEM_TYPE_NV:
-      item = (struct mcfg_item *)(file_out_buff + output_offset);
-      item->id = mcfg_dump_list[i].id;
-      item->type = mcfg_dump_list[i].type;
-      item->attrib = mcfg_dump_list[i].attrib;
-      output_offset += sizeof(struct mcfg_item);
-      nvitem = (struct mcfg_nvitem *)(file_out_buff + output_offset);
-      nvitem->id =
-          mcfg_dump_list[i].id; // TODO: Do we share IDs here? I think we don't
-      nvitem->payload_size = mcfg_dump_list[i].size;
-      output_offset += sizeof(struct mcfg_nvitem);
       memcpy((file_out_buff + output_offset), mcfg_dump_list[i].blob,
              mcfg_dump_list[i].size);
-      nvitem = NULL;
-      item = NULL;
       output_offset += mcfg_dump_list[i].size;
+
       break;
     case MCFG_ITEM_TYPE_NVFILE:
     case MCFG_ITEM_TYPE_FILE:
@@ -504,12 +492,12 @@ int repack_mcfg_data() {
 
       file_section = (struct mcfg_nvfile_part *)(file_out_buff + output_offset);
       file_section->file_section = 1; // Store the file name
-      file_section->section_len = strlen(mcfg_dump_list[i].diskpath);
+      file_section->section_len = mcfg_dump_list[i].filenamesz;
       memcpy(file_section->payload, mcfg_dump_list[i].diskpath,
-             file_section->section_len);
+             mcfg_dump_list[i].filenamesz);
              
       output_offset +=
-          sizeof(struct mcfg_nvfile_part) + strlen(mcfg_dump_list[i].diskpath);
+          sizeof(struct mcfg_nvfile_part) + mcfg_dump_list[i].filenamesz;
       file_section = (struct mcfg_nvfile_part *)(file_out_buff + output_offset);
       file_section->file_section = 2; // File data
       file_section->section_len = mcfg_dump_list[i].size;
@@ -527,6 +515,7 @@ int repack_mcfg_data() {
       fprintf(stderr, "Unhandled file type %i\n", mcfg_dump_list[i].type);
       break;
     }
+
   }
   fprintf(stdout, "\n");
   
@@ -604,7 +593,7 @@ int get_dump_list(char *input_file) {
       }
     }
     ptr++;
-    printf("Path to file %s\n", ptr);
+    fprintf(stdout, " - Path to file %s\n", ptr);
     tmpfile = fopen(ptr, "rb");
     if (tmpfile == NULL) {
       fprintf(stderr, "Error opening blob!\n");
@@ -627,7 +616,7 @@ int main(int argc, char *argv[]) {
   char *output_file;
   int c;
   INPUT_ELF_OFFSET = 0;
-  fprintf(stdout, "Qualcomm MCFG binary file converter \n");
+  fprintf(stdout, "Qualcomm MCFG binary file packer \n");
   if (argc < 4) {
     print_help();
     return 0;
