@@ -458,12 +458,11 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
     memset(filename, 0, 512);
     snprintf(filename, 512, "%s/footer_section_%i.bin", output_dir_footer,
              proto->id);
-    fprintf(stdout, "Saving to %s...\n", filename);
+    fprintf(stdout, "   - Saving to %s...\n", filename);
     if (save_file(filename, footer_items[sections_parsed].blob,
                   footer_items[sections_parsed].size) < 0) {
       fprintf(stderr, "Error dumping footer section %i!\n", sections_parsed);
     }
-    fprintf(stdout, "Saved!\n");
     prev_offset = curr_obj_offset;
     proto = NULL;
     sections_parsed++;
@@ -473,7 +472,6 @@ int analyze_footer(uint8_t *footer, uint16_t sz) {
 }
 
 int process_nv_configuration_data() {
-  fprintf(stdout, "%s: start\n", __func__);
   int num_items = mcfg_head_in->no_of_items;
   struct item_blob nv_items[num_items];
   char filename[512];
@@ -496,10 +494,7 @@ int process_nv_configuration_data() {
         (struct mcfg_item *)(file_in_buff + current_offset);
     struct mcfg_nvitem *nvitem;
     struct mcfg_nvfile_part *file_section;
-    if (!debug) {
-      fprintf(stdout, " - %i: #%i (%s)\n", i, item->id,
-              get_nvitem_name(item->id));
-    }
+
 
     nv_items[i].offset = current_offset;
     nv_items[i].attrib = item->attrib;
@@ -511,9 +506,8 @@ int process_nv_configuration_data() {
     case MCFG_ITEM_TYPE_NV:
     case MCFG_ITEM_TYPE_UNKNOWN:
       nvitem = (struct mcfg_nvitem *)(file_in_buff + current_offset);
-      if (debug)
-        fprintf(stdout, "Item %i (ID %i) at offset %i: NV data\n", i, item->id,
-                current_offset);
+        fprintf(stdout, " - [NV] Item %i (#%i) @offset %i: %s \n", i, nvitem->id,
+                current_offset, get_nvitem_name(nvitem->id));
 
       current_offset += sizeof(struct mcfg_nvitem) + nvitem->payload_size;
       nv_items[i].size = current_offset - nv_items[i].offset;
@@ -521,7 +515,7 @@ int process_nv_configuration_data() {
              nv_items[i].size);
 
       memset(filename, 0, 512);
-      get_nvitem_as_filename(item->id, i, filename);
+      get_nvitem_as_filename(nvitem->id, i, filename);
       add_file_to_dumplist(item->id, item->type, item->attrib,filename);
       if (save_file(filename, nv_items[i].blob, nv_items[i].size) < 0) {
         fprintf(stderr, "Error saving NV item %i\n", i);
@@ -544,8 +538,8 @@ int process_nv_configuration_data() {
     case MCFG_ITEM_TYPE_NVFILE:
     case MCFG_ITEM_TYPE_FILE:
       memset(efsfilenametmp, 0, 256);
-      if (debug)
-        fprintf(stdout, "#%i (@%ib): EFS file: ", i, current_offset);
+
+
       for (int k = 0; k < 2; k++) {
         file_section =
             (struct mcfg_nvfile_part *)(file_in_buff + current_offset);
@@ -575,6 +569,8 @@ int process_nv_configuration_data() {
           }
           break;
         }
+                      fprintf(stdout, " - [File] Item %i (#%i) @offset %i: %s \n", i, item->id,
+                current_offset, efsfilenametmp);
         file_section = NULL;
       }
       nv_items[i].size = current_offset - nv_items[i].offset;
@@ -607,7 +603,7 @@ int process_nv_configuration_data() {
 
       memset(filename, 0, 512);
       snprintf(filename, 512, "%s/footer_complete.bin", output_dir_footer);
-      fprintf(stdout, "Saving to %s...\n", filename);
+      fprintf(stdout, " - Saving complete footer to %s...\n", filename);
       if (save_file(filename,
                     (file_in_buff + current_offset - sizeof(struct mcfg_item)),
                     input_footer_size) < 0) {
