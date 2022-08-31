@@ -522,10 +522,10 @@ int repack_mcfg_data() {
   // Calculate filesizes for the different program headers
   ph0->p_filesz = sizeof(struct Elf32_Ehdr) + (3 * sizeof(struct elf32_phdr));
   ph1->p_filesz = sizeof(struct hash_segment_header);
-  ph2->p_filesz = sizeof(uint32_t) + output_offset -
+  ph2->p_filesz = output_offset -
                   MCFG_DATA_OFFSET; // the last byte where we tell the padded
                                     // bytes is the uint32_t
-  ph2->p_memsz = sizeof(uint32_t) + output_offset -
+  ph2->p_memsz = output_offset -
                  MCFG_DATA_OFFSET; // the last byte where we tell the padded
                                    // bytes is the uint32_t
   /* Hashes */
