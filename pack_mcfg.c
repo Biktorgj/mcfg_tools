@@ -180,7 +180,8 @@ int make_mcfg_header(uint32_t offset) {
   memcpy(mcfg_head_out->magic, MCFG_FILE_HEADER_MAGIC, 4);
   mcfg_head_out->config_type = 1;
   mcfg_head_out->format_version = 3;
-  mcfg_head_out->no_of_items = num_elements; // We need to account for the header
+  mcfg_head_out->no_of_items =
+      num_elements; // We need to account for the header
   mcfg_head_out->carrier_id = mcfg_head_in->carrier_id;
   mcfg_head_out->padding = 0x00;
 
@@ -412,13 +413,14 @@ int repack_mcfg_data() {
       input_footer_size = mcfg_dump_list[i].size;
     } else if (mcfg_dump_list[i].type == MCFG_ITEM_TYPE_NV) {
 
-      input_nvitems_size+= mcfg_dump_list[i].size; // Contents of NV item
+      input_nvitems_size += mcfg_dump_list[i].size; // Contents of NV item
     } else if (mcfg_dump_list[i].type == MCFG_ITEM_TYPE_NVFILE ||
                mcfg_dump_list[i].type == MCFG_ITEM_TYPE_FILE) {
       int fcount = 0;
       input_nvitems_size += sizeof(struct mcfg_item); // Item
-      input_nvitems_size += sizeof(struct mcfg_nvfile_part)*2; // File path descriptor + contents
-      input_nvitems_size+= mcfg_dump_list[i].size; // Contents of EFS file
+      input_nvitems_size += sizeof(struct mcfg_nvfile_part) *
+                            2; // File path descriptor + contents
+      input_nvitems_size += mcfg_dump_list[i].size; // Contents of EFS file
       tmptr = mcfg_dump_list[i].filename;
       while (tmptr && fcount < 2) {
         if (*tmptr == '/') {
@@ -429,29 +431,30 @@ int repack_mcfg_data() {
         }
       }
       tmptr--;
-      mcfg_dump_list[i].filenamesz = strlen(tmptr)-3;
+      mcfg_dump_list[i].filenamesz = strlen(tmptr) - 3;
       printf("Filename: %s of size %i\n", tmptr, mcfg_dump_list[i].filenamesz);
       memcpy(mcfg_dump_list[i].diskpath, tmptr, mcfg_dump_list[i].filenamesz);
-      mcfg_dump_list[i].diskpath[(mcfg_dump_list[i].filenamesz-1)] = 0x00;
-      printf("Filename: %s of size %i\nAs hex:\n", tmptr, mcfg_dump_list[i].filenamesz);
-      for (int op =0 ; op < mcfg_dump_list[i].filenamesz; op++) {
-        printf ("%.2x ", mcfg_dump_list[i].diskpath[op]);
+      mcfg_dump_list[i].diskpath[(mcfg_dump_list[i].filenamesz - 1)] = 0x00;
+      printf("Filename: %s of size %i\nAs hex:\n", tmptr,
+             mcfg_dump_list[i].filenamesz);
+      for (int op = 0; op < mcfg_dump_list[i].filenamesz; op++) {
+        printf("%.2x ", mcfg_dump_list[i].diskpath[op]);
       }
       printf("\n");
-      input_nvitems_size += mcfg_dump_list[i].filenamesz; // Path in section 1 - '.bin' and where the '.' was we insert \0
+      input_nvitems_size +=
+          mcfg_dump_list[i].filenamesz; // Path in section 1 - '.bin' and where
+                                        // the '.' was we insert \0
       printf("Filepath %s\n", mcfg_dump_list[i].diskpath);
     }
   }
 
-  file_out_sz = MCFG_DATA_OFFSET + 
-                sizeof(struct mcfg_file_header) +
-                sizeof(struct mcfg_sub_version_data) + 
-                input_nvitems_size +
+  file_out_sz = MCFG_DATA_OFFSET + sizeof(struct mcfg_file_header) +
+                sizeof(struct mcfg_sub_version_data) + input_nvitems_size +
                 input_footer_size;
 
   fprintf(stdout, "Target file will be %i bytes (%i %i %i) \n", file_out_sz,
           MCFG_DATA_OFFSET, input_nvitems_size, input_footer_size);
-  int output_offset = 0;
+  uint64_t output_offset = 0;
   fprintf(stdout, "Recreating file...\n");
   fprintf(stdout, " - Allocating %i bytes for the output file\n", file_out_sz);
   file_out_buff = calloc(file_out_sz, sizeof(uint8_t));
@@ -495,7 +498,7 @@ int repack_mcfg_data() {
       file_section->section_len = mcfg_dump_list[i].filenamesz;
       memcpy(file_section->payload, mcfg_dump_list[i].diskpath,
              mcfg_dump_list[i].filenamesz);
-             
+
       output_offset +=
           sizeof(struct mcfg_nvfile_part) + mcfg_dump_list[i].filenamesz;
       file_section = (struct mcfg_nvfile_part *)(file_out_buff + output_offset);
@@ -515,19 +518,18 @@ int repack_mcfg_data() {
       fprintf(stderr, "Unhandled file type %i\n", mcfg_dump_list[i].type);
       break;
     }
-
   }
   fprintf(stdout, "\n");
-  
+
   // Calculate filesizes for the different program headers
   ph0->p_filesz = sizeof(struct Elf32_Ehdr) + (3 * sizeof(struct elf32_phdr));
   ph1->p_filesz = sizeof(struct hash_segment_header);
-  ph2->p_filesz = output_offset -
-                  MCFG_DATA_OFFSET; // the last byte where we tell the padded
-                                    // bytes is the uint32_t
-  ph2->p_memsz = output_offset -
-                 MCFG_DATA_OFFSET; // the last byte where we tell the padded
-                                   // bytes is the uint32_t
+  ph2->p_filesz =
+      output_offset - MCFG_DATA_OFFSET; // the last byte where we tell the
+                                        // padded bytes is the uint32_t
+  ph2->p_memsz =
+      output_offset - MCFG_DATA_OFFSET; // the last byte where we tell the
+                                        // padded bytes is the uint32_t
   /* Hashes */
   fprintf(stdout, " - Regenerating file hashes... \n");
   recreate_output_file_hash();
