@@ -1,5 +1,5 @@
-# MCFG READER AND WRITER
-### Small utility to unpack and repack EFS item files
+# MCFG Tools
+### Small utilities to unpack and repack EFS item files
 #### THIS IS IN TESTING STAGE. FEEL FREE TO PLAY WITH IT.
 
 Small utilities to read and write carrier specific MBN files for Qualcomm modems.
